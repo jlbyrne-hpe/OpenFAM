@@ -392,7 +392,8 @@ void Fam_Ops_Libfabric::finalize() {
     }
 }
 
-int Fam_Ops_Libfabric::put_blocking(void *local, Fam_Descriptor *descriptor,
+int Fam_Ops_Libfabric::put_blocking(fam_buffer_info *localBuf,
+                                    Fam_Descriptor *descriptor,
                                     uint64_t offset, uint64_t nbytes) {
     uint64_t *memServerIds = descriptor->get_memserver_ids();
     size_t interleaveSize = descriptor->get_interleave_size();
@@ -407,7 +408,6 @@ int Fam_Ops_Libfabric::put_blocking(void *local, Fam_Descriptor *descriptor,
     // first block and the displacement within the block, else issue a single IO
     // to a memory server where that dataitem is located.
     if (usedMemsrvCnt == 1) {
-        uint64_t currentLocal = (uint64_t)local;
         uint64_t currentOffset = offset;
         uint64_t currentNbytes = nbytes;
         uint64_t pending_nbytes;
@@ -420,7 +420,7 @@ int Fam_Ops_Libfabric::put_blocking(void *local, Fam_Descriptor *descriptor,
             }
             // Issue an IO
             fi_context *ctx =
-                fabric_write(keys[0], (void *)currentLocal, currentNbytes,
+                fabric_write(keys[0], localBuf, currentNbytes,
                              (uint64_t)(base_addr_list[0]) + currentOffset,
                              (*fiAddr)[memServerIds[0]], famCtx, true);
             // wait for IO to complete
@@ -436,10 +436,8 @@ int Fam_Ops_Libfabric::put_blocking(void *local, Fam_Descriptor *descriptor,
             }
             famCtx->release_lock();
             currentNbytes = pending_nbytes;
-            if (currentNbytes > 0) {
-                currentOffset = currentOffset + fabric_max_msg_size;
-                currentLocal = currentLocal + fabric_max_msg_size;
-            }
+	    currentOffset += fabric_max_msg_size;
+	    localBuf->start += fabric_max_msg_size;
         }
         return ret;
     }
@@ -453,8 +451,6 @@ int Fam_Ops_Libfabric::put_blocking(void *local, Fam_Descriptor *descriptor,
     uint64_t currentFamPtr =
         (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
         interleaveSize;
-    // Current Local pointer position
-    uint64_t currentLocalPtr = (uint64_t)local;
     // Displacement from the starting position of the interleave block
     uint64_t displacement = offset % interleaveSize;
 
@@ -473,7 +469,7 @@ int Fam_Ops_Libfabric::put_blocking(void *local, Fam_Descriptor *descriptor,
             chunkSize = firstBlockSize;
         // Issue an IO
         fi_context *ctx = fabric_write(
-            keys[currentServerIndex], (void *)currentLocalPtr, chunkSize,
+            keys[currentServerIndex], localBuf, chunkSize,
             (uint64_t)(base_addr_list[currentServerIndex]) + currentFamPtr +
                 displacement,
             (*fiAddr)[memServerIds[currentServerIndex]],
@@ -492,7 +488,7 @@ int Fam_Ops_Libfabric::put_blocking(void *local, Fam_Descriptor *descriptor,
         // Increment the number of bytes written
         nBytesWritten += chunkSize;
         // Increment the local buffer pointer by number of bytes written
-        currentLocalPtr += chunkSize;
+        localBuf->start += chunkSize;
     }
     // Loop until the requested number of bytes are issued through IO
     while (nBytesWritten < nbytes) {
@@ -504,7 +500,7 @@ int Fam_Ops_Libfabric::put_blocking(void *local, Fam_Descriptor *descriptor,
             chunkSize = interleaveSize;
         // Issue an IO
         fi_context *ctx = fabric_write(
-            keys[currentServerIndex], (void *)currentLocalPtr, chunkSize,
+            keys[currentServerIndex], localBuf, chunkSize,
             (uint64_t)(base_addr_list[currentServerIndex]) + currentFamPtr,
             (*fiAddr)[memServerIds[currentServerIndex]],
             get_context(descriptor), true);
@@ -519,7 +515,7 @@ int Fam_Ops_Libfabric::put_blocking(void *local, Fam_Descriptor *descriptor,
             currentFamPtr += interleaveSize;
         }
         // Increment the number of bytes written
-        currentLocalPtr += chunkSize;
+        localBuf->start += chunkSize;
         // Increment the local buffer pointer by number of bytes written
         nBytesWritten += chunkSize;
     }
@@ -544,7 +540,8 @@ int Fam_Ops_Libfabric::put_blocking(void *local, Fam_Descriptor *descriptor,
     return ret;
 }
 
-int Fam_Ops_Libfabric::get_blocking(void *local, Fam_Descriptor *descriptor,
+int Fam_Ops_Libfabric::get_blocking(fam_buffer_info *localBuf,
+				    Fam_Descriptor *descriptor,
                                     uint64_t offset, uint64_t nbytes) {
     uint64_t *memServerIds = descriptor->get_memserver_ids();
     size_t interleaveSize = descriptor->get_interleave_size();
@@ -559,7 +556,6 @@ int Fam_Ops_Libfabric::get_blocking(void *local, Fam_Descriptor *descriptor,
     // first block and the displacement within the block using the given offset,
     // else issue a single IO to a memory server where that dataitem is located.
     if (usedMemsrvCnt == 1) {
-        uint64_t currentLocal = (uint64_t)local;
         uint64_t currentOffset = offset;
         uint64_t currentNbytes = nbytes;
         uint64_t pending_nbytes;
@@ -572,7 +568,7 @@ int Fam_Ops_Libfabric::get_blocking(void *local, Fam_Descriptor *descriptor,
             }
             // Issue an IO
             fi_context *ctx =
-                fabric_read(keys[0], (void *)currentLocal, currentNbytes,
+                fabric_read(keys[0], localBuf, currentNbytes,
                             (uint64_t)(base_addr_list[0]) + currentOffset,
                             (*fiAddr)[memServerIds[0]], famCtx, true);
 
@@ -589,10 +585,8 @@ int Fam_Ops_Libfabric::get_blocking(void *local, Fam_Descriptor *descriptor,
             }
             famCtx->release_lock();
             currentNbytes = pending_nbytes;
-            if (currentNbytes > 0) {
-                currentOffset = currentOffset + fabric_max_msg_size;
-                currentLocal = currentLocal + fabric_max_msg_size;
-            }
+	    currentOffset += fabric_max_msg_size;
+	    localBuf->start += fabric_max_msg_size;
         }
         return ret;
     }
@@ -605,8 +599,6 @@ int Fam_Ops_Libfabric::get_blocking(void *local, Fam_Descriptor *descriptor,
     uint64_t currentFamPtr =
         (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
         interleaveSize;
-    // Current Local pointer position
-    uint64_t currentLocalPtr = (uint64_t)local;
     // Displacement from the starting position of the interleave block
     uint64_t displacement = offset % interleaveSize;
     uint64_t chunkSize;
@@ -625,7 +617,7 @@ int Fam_Ops_Libfabric::get_blocking(void *local, Fam_Descriptor *descriptor,
 
         // Issue an IO
         fi_context *ctx = fabric_read(
-            keys[currentServerIndex], (void *)currentLocalPtr, chunkSize,
+            keys[currentServerIndex], localBuf, chunkSize,
             (uint64_t)(base_addr_list[currentServerIndex]) + currentFamPtr +
                 displacement,
             (*fiAddr)[memServerIds[currentServerIndex]],
@@ -644,7 +636,7 @@ int Fam_Ops_Libfabric::get_blocking(void *local, Fam_Descriptor *descriptor,
         // Increment the number of bytes read
         nBytesRead += chunkSize;
         // Increment the local buffer pointer by number of bytes read
-        currentLocalPtr += chunkSize;
+        localBuf->start += chunkSize;
     }
     // Loop until the requested number of bytes are issued through IO
     while (nBytesRead < nbytes) {
@@ -656,7 +648,7 @@ int Fam_Ops_Libfabric::get_blocking(void *local, Fam_Descriptor *descriptor,
             chunkSize = interleaveSize;
         // Issue an IO
         fi_context *ctx = fabric_read(
-            keys[currentServerIndex], (void *)currentLocalPtr, chunkSize,
+            keys[currentServerIndex], localBuf, chunkSize,
             (uint64_t)(base_addr_list[currentServerIndex]) + currentFamPtr,
             (*fiAddr)[memServerIds[currentServerIndex]],
             get_context(descriptor), true);
@@ -671,7 +663,7 @@ int Fam_Ops_Libfabric::get_blocking(void *local, Fam_Descriptor *descriptor,
             currentFamPtr += interleaveSize;
         }
         // Increment the number of bytes read
-        currentLocalPtr += chunkSize;
+        localBuf->start += chunkSize;
         // Increment the local buffer pointer by number of bytes read
         nBytesRead += chunkSize;
     }
@@ -696,7 +688,8 @@ int Fam_Ops_Libfabric::get_blocking(void *local, Fam_Descriptor *descriptor,
     return ret;
 }
 
-int Fam_Ops_Libfabric::scatter_blocking(void *local, Fam_Descriptor *descriptor,
+int Fam_Ops_Libfabric::scatter_blocking(fam_buffer_info *localBuf,
+					Fam_Descriptor *descriptor,
                                         uint64_t nElements,
                                         uint64_t firstElement, uint64_t stride,
                                         uint64_t elementSize) {
@@ -722,7 +715,7 @@ int Fam_Ops_Libfabric::scatter_blocking(void *local, Fam_Descriptor *descriptor,
         }
         // Issue an IO
         fi_context *ctx = fabric_scatter_stride(
-            keys[0], (void *)local, elementSize, firstElement, nElements,
+            keys[0], localBuf, elementSize, firstElement, nElements,
             stride, (*fiAddr)[memServerIds[0]], famCtx, fabric_iov_limit,
             (uint64_t)(base_addr_list[0]), true);
         // wait for IO to complete
@@ -745,8 +738,6 @@ int Fam_Ops_Libfabric::scatter_blocking(void *local, Fam_Descriptor *descriptor,
 
     // Initialize the offset to first element position
     uint64_t offset = firstElement * elementSize;
-    // Current Local pointer position
-    uint64_t currentLocalPtr = (uint64_t)local;
     for (int i = 0; i < (int)nElements; i++) {
         // Current memory server Id index
         uint64_t currentServerIndex =
@@ -771,7 +762,7 @@ int Fam_Ops_Libfabric::scatter_blocking(void *local, Fam_Descriptor *descriptor,
                 chunkSize = firstBlockSize;
             // Issue an IO
             fi_context *ctx = fabric_write(
-                keys[currentServerIndex], (void *)currentLocalPtr, chunkSize,
+                keys[currentServerIndex], localBuf, chunkSize,
                 (uint64_t)(base_addr_list[currentServerIndex]) + currentFamPtr +
                     displacement,
                 (*fiAddr)[memServerIds[currentServerIndex]],
@@ -790,7 +781,7 @@ int Fam_Ops_Libfabric::scatter_blocking(void *local, Fam_Descriptor *descriptor,
             // Increment the number of bytes written
             nBytesWritten += chunkSize;
             // Increment the local buffer pointer by number of bytes written
-            currentLocalPtr += chunkSize;
+            localBuf->start += chunkSize;
         }
         // Loop until the requested number of bytes are issued through IO
         while (nBytesWritten < elementSize) {
@@ -802,7 +793,7 @@ int Fam_Ops_Libfabric::scatter_blocking(void *local, Fam_Descriptor *descriptor,
                 chunkSize = interleaveSize;
             // Issue an IO
             fi_context *ctx = fabric_write(
-                keys[currentServerIndex], (void *)currentLocalPtr, chunkSize,
+                keys[currentServerIndex], localBuf, chunkSize,
                 (uint64_t)(base_addr_list[currentServerIndex]) + currentFamPtr,
                 (*fiAddr)[memServerIds[currentServerIndex]],
                 get_context(descriptor), true);
@@ -817,7 +808,7 @@ int Fam_Ops_Libfabric::scatter_blocking(void *local, Fam_Descriptor *descriptor,
                 currentFamPtr += interleaveSize;
             }
             // Increment the number of bytes written
-            currentLocalPtr += chunkSize;
+            localBuf->start += chunkSize;
             // Increment the local buffer pointer by number of bytes written
             nBytesWritten += chunkSize;
         }
@@ -844,7 +835,8 @@ int Fam_Ops_Libfabric::scatter_blocking(void *local, Fam_Descriptor *descriptor,
     return ret;
 }
 
-int Fam_Ops_Libfabric::gather_blocking(void *local, Fam_Descriptor *descriptor,
+int Fam_Ops_Libfabric::gather_blocking(fam_buffer_info *localBuf,
+				       Fam_Descriptor *descriptor,
                                        uint64_t nElements,
                                        uint64_t firstElement, uint64_t stride,
                                        uint64_t elementSize) {
@@ -870,7 +862,7 @@ int Fam_Ops_Libfabric::gather_blocking(void *local, Fam_Descriptor *descriptor,
         }
         // Issue an IO
         fi_context *ctx = fabric_gather_stride(
-            keys[0], (void *)local, elementSize, firstElement, nElements,
+            keys[0], localBuf, elementSize, firstElement, nElements,
             stride, (*fiAddr)[memServerIds[0]], famCtx, fabric_iov_limit,
             (uint64_t)(base_addr_list[0]), true);
         // wait for IO to complete
@@ -894,7 +886,6 @@ int Fam_Ops_Libfabric::gather_blocking(void *local, Fam_Descriptor *descriptor,
     // Initialize the offset to first element position
     uint64_t offset = firstElement * elementSize;
     // Current Local pointer position
-    uint64_t currentLocalPtr = (uint64_t)local;
     for (int i = 0; i < (int)nElements; i++) {
         // Current memory server Id index
         uint64_t currentServerIndex =
@@ -919,7 +910,7 @@ int Fam_Ops_Libfabric::gather_blocking(void *local, Fam_Descriptor *descriptor,
                 chunkSize = firstBlockSize;
             // Issue an IO
             fi_context *ctx = fabric_read(
-                keys[currentServerIndex], (void *)currentLocalPtr, chunkSize,
+                keys[currentServerIndex], localBuf, chunkSize,
                 (uint64_t)(base_addr_list[currentServerIndex]) + currentFamPtr +
                     displacement,
                 (*fiAddr)[memServerIds[currentServerIndex]],
@@ -938,7 +929,7 @@ int Fam_Ops_Libfabric::gather_blocking(void *local, Fam_Descriptor *descriptor,
             // Increment the number of bytes read
             nBytesRead += chunkSize;
             // Increment the local buffer pointer by number of bytes read
-            currentLocalPtr += chunkSize;
+            localBuf->start += chunkSize;
         }
         // Loop until the requested number of bytes are issued through IO
         while (nBytesRead < elementSize) {
@@ -950,7 +941,7 @@ int Fam_Ops_Libfabric::gather_blocking(void *local, Fam_Descriptor *descriptor,
                 chunkSize = interleaveSize;
             // Issue an IO
             fi_context *ctx = fabric_read(
-                keys[currentServerIndex], (void *)currentLocalPtr, chunkSize,
+                keys[currentServerIndex], localBuf, chunkSize,
                 (uint64_t)(base_addr_list[currentServerIndex]) + currentFamPtr,
                 (*fiAddr)[memServerIds[currentServerIndex]],
                 get_context(descriptor), true);
@@ -965,7 +956,7 @@ int Fam_Ops_Libfabric::gather_blocking(void *local, Fam_Descriptor *descriptor,
                 currentFamPtr += interleaveSize;
             }
             // Increment the number of bytes read
-            currentLocalPtr += chunkSize;
+            localBuf->start += chunkSize;
             // Increment the local buffer pointer by number of bytes read
             nBytesRead += chunkSize;
         }
@@ -992,7 +983,8 @@ int Fam_Ops_Libfabric::gather_blocking(void *local, Fam_Descriptor *descriptor,
     return ret;
 }
 
-int Fam_Ops_Libfabric::scatter_blocking(void *local, Fam_Descriptor *descriptor,
+int Fam_Ops_Libfabric::scatter_blocking(fam_buffer_info *localBuf,
+					Fam_Descriptor *descriptor,
                                         uint64_t nElements,
                                         uint64_t *elementIndex,
                                         uint64_t elementSize) {
@@ -1018,7 +1010,7 @@ int Fam_Ops_Libfabric::scatter_blocking(void *local, Fam_Descriptor *descriptor,
         }
         // Issue an IO
         fi_context *ctx = fabric_scatter_index(
-            keys[0], (void *)local, elementSize, elementIndex, nElements,
+            keys[0], localBuf, elementSize, elementIndex, nElements,
             (*fiAddr)[memServerIds[0]], famCtx, fabric_iov_limit,
             (uint64_t)(base_addr_list[0]), true);
         // wait for IO to complete
@@ -1042,7 +1034,6 @@ int Fam_Ops_Libfabric::scatter_blocking(void *local, Fam_Descriptor *descriptor,
     // iterate through the indeces provided by user
     uint64_t offset;
     // Current Local pointer position
-    uint64_t currentLocalPtr = (uint64_t)local;
     for (int i = 0; i < (int)nElements; i++) {
         offset = elementIndex[i] * elementSize;
         // Current memory server Id index
@@ -1068,7 +1059,7 @@ int Fam_Ops_Libfabric::scatter_blocking(void *local, Fam_Descriptor *descriptor,
                 chunkSize = firstBlockSize;
             // Issue an IO
             fi_context *ctx = fabric_write(
-                keys[currentServerIndex], (void *)currentLocalPtr, chunkSize,
+                keys[currentServerIndex], localBuf, chunkSize,
                 (uint64_t)(base_addr_list[currentServerIndex]) + currentFamPtr +
                     displacement,
                 (*fiAddr)[memServerIds[currentServerIndex]],
@@ -1087,7 +1078,7 @@ int Fam_Ops_Libfabric::scatter_blocking(void *local, Fam_Descriptor *descriptor,
             // Increment the number of bytes written
             nBytesWritten += chunkSize;
             // Increment the local buffer pointer by number of bytes written
-            currentLocalPtr += chunkSize;
+            localBuf->start += chunkSize;
         }
         // Loop until the requested number of bytes are issued through IO
         while (nBytesWritten < elementSize) {
@@ -1099,7 +1090,7 @@ int Fam_Ops_Libfabric::scatter_blocking(void *local, Fam_Descriptor *descriptor,
                 chunkSize = interleaveSize;
             // Issue an IO
             fi_context *ctx = fabric_write(
-                keys[currentServerIndex], (void *)currentLocalPtr, chunkSize,
+                keys[currentServerIndex], localBuf, chunkSize,
                 (uint64_t)(base_addr_list[currentServerIndex]) + currentFamPtr,
                 (*fiAddr)[memServerIds[currentServerIndex]],
                 get_context(descriptor), true);
@@ -1114,7 +1105,7 @@ int Fam_Ops_Libfabric::scatter_blocking(void *local, Fam_Descriptor *descriptor,
                 currentFamPtr += interleaveSize;
             }
             // Increment the number of bytes written
-            currentLocalPtr += chunkSize;
+            localBuf->start += chunkSize;
             // Increment the local buffer pointer by number of bytes written
             nBytesWritten += chunkSize;
         }
@@ -1140,7 +1131,8 @@ int Fam_Ops_Libfabric::scatter_blocking(void *local, Fam_Descriptor *descriptor,
     return ret;
 }
 
-int Fam_Ops_Libfabric::gather_blocking(void *local, Fam_Descriptor *descriptor,
+int Fam_Ops_Libfabric::gather_blocking(fam_buffer_info *localBuf,
+				       Fam_Descriptor *descriptor,
                                        uint64_t nElements,
                                        uint64_t *elementIndex,
                                        uint64_t elementSize) {
@@ -1166,7 +1158,7 @@ int Fam_Ops_Libfabric::gather_blocking(void *local, Fam_Descriptor *descriptor,
         }
         // Issue an IO
         fi_context *ctx = fabric_gather_index(
-            keys[0], (void *)local, elementSize, elementIndex, nElements,
+            keys[0], localBuf, elementSize, elementIndex, nElements,
             (*fiAddr)[memServerIds[0]], famCtx, fabric_iov_limit,
             (uint64_t)(base_addr_list[0]), true);
         // wait for IO to complete
@@ -1190,7 +1182,6 @@ int Fam_Ops_Libfabric::gather_blocking(void *local, Fam_Descriptor *descriptor,
     // iterate through the indeces provided by user
     uint64_t offset;
     // Current Local pointer position
-    uint64_t currentLocalPtr = (uint64_t)local;
     for (int i = 0; i < (int)nElements; i++) {
         offset = elementIndex[i] * elementSize;
         // Current memory server Id index
@@ -1216,7 +1207,7 @@ int Fam_Ops_Libfabric::gather_blocking(void *local, Fam_Descriptor *descriptor,
                 chunkSize = firstBlockSize;
             // Issue IO
             fi_context *ctx = fabric_read(
-                keys[currentServerIndex], (void *)currentLocalPtr, chunkSize,
+                keys[currentServerIndex], localBuf, chunkSize,
                 (uint64_t)(base_addr_list[currentServerIndex]) + currentFamPtr +
                     displacement,
                 (*fiAddr)[memServerIds[currentServerIndex]],
@@ -1235,7 +1226,7 @@ int Fam_Ops_Libfabric::gather_blocking(void *local, Fam_Descriptor *descriptor,
             // Increment the number of bytes read
             nBytesRead += chunkSize;
             // Increment the local buffer pointer by number of bytes read
-            currentLocalPtr += chunkSize;
+            localBuf->start += chunkSize;
         }
         // Loop until the requested number of bytes are issued through IO
         while (nBytesRead < elementSize) {
@@ -1247,7 +1238,7 @@ int Fam_Ops_Libfabric::gather_blocking(void *local, Fam_Descriptor *descriptor,
                 chunkSize = interleaveSize;
             // Issue an IO
             fi_context *ctx = fabric_read(
-                keys[currentServerIndex], (void *)currentLocalPtr, chunkSize,
+                keys[currentServerIndex], localBuf, chunkSize,
                 (uint64_t)(base_addr_list[currentServerIndex]) + currentFamPtr,
                 (*fiAddr)[memServerIds[currentServerIndex]],
                 get_context(descriptor), true);
@@ -1262,7 +1253,7 @@ int Fam_Ops_Libfabric::gather_blocking(void *local, Fam_Descriptor *descriptor,
                 currentFamPtr += interleaveSize;
             }
             // Increment the number of bytes read
-            currentLocalPtr += chunkSize;
+            localBuf->start += chunkSize;
             // Increment the local buffer pointer by number of bytes read
             nBytesRead += chunkSize;
         }
@@ -1288,7 +1279,8 @@ int Fam_Ops_Libfabric::gather_blocking(void *local, Fam_Descriptor *descriptor,
     return ret;
 }
 
-void Fam_Ops_Libfabric::put_nonblocking(void *local, Fam_Descriptor *descriptor,
+void Fam_Ops_Libfabric::put_nonblocking(fam_buffer_info *localBuf,
+					Fam_Descriptor *descriptor,
                                         uint64_t offset, uint64_t nbytes) {
     uint64_t *memServerIds = descriptor->get_memserver_ids();
     size_t interleaveSize = descriptor->get_interleave_size();
@@ -1302,7 +1294,6 @@ void Fam_Ops_Libfabric::put_nonblocking(void *local, Fam_Descriptor *descriptor,
     // first block and the displacement within the block, else issue a single IO
     // to a memory server where that dataitem is located.
     if (usedMemsrvCnt == 1) {
-        uint64_t currentLocal = (uint64_t)local;
         uint64_t currentOffset = offset;
         uint64_t currentNbytes = nbytes;
         uint64_t pending_nbytes;
@@ -1314,14 +1305,12 @@ void Fam_Ops_Libfabric::put_nonblocking(void *local, Fam_Descriptor *descriptor,
                 pending_nbytes = 0;
             }
             // Issue an IO
-            fabric_write(keys[0], (void *)currentLocal, currentNbytes,
+            fabric_write(keys[0], localBuf, currentNbytes,
                          (uint64_t)(base_addr_list[0]) + currentOffset,
                          (*fiAddr)[memServerIds[0]], famCtx, false);
             currentNbytes = pending_nbytes;
-            if (currentNbytes > 0) {
-                currentOffset = currentOffset + fabric_max_msg_size;
-                currentLocal = currentLocal + fabric_max_msg_size;
-            }
+	    currentOffset += fabric_max_msg_size;
+	    localBuf->start += fabric_max_msg_size;
         }
 
         return;
@@ -1333,8 +1322,6 @@ void Fam_Ops_Libfabric::put_nonblocking(void *local, Fam_Descriptor *descriptor,
     uint64_t currentFamPtr =
         (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
         interleaveSize;
-    // Current Local pointer position
-    uint64_t currentLocalPtr = (uint64_t)local;
     // Displacement from the starting position of the interleave block
     uint64_t displacement = offset % interleaveSize;
 
@@ -1352,8 +1339,7 @@ void Fam_Ops_Libfabric::put_nonblocking(void *local, Fam_Descriptor *descriptor,
         else
             chunkSize = firstBlockSize;
         // Issue an IO
-        fabric_write(keys[currentServerIndex], (void *)currentLocalPtr,
-                     chunkSize,
+        fabric_write(keys[currentServerIndex], localBuf, chunkSize,
                      (uint64_t)(base_addr_list[currentServerIndex]) +
                          currentFamPtr + displacement,
                      (*fiAddr)[memServerIds[currentServerIndex]],
@@ -1370,7 +1356,7 @@ void Fam_Ops_Libfabric::put_nonblocking(void *local, Fam_Descriptor *descriptor,
         // Increment the number of bytes written
         nBytesWritten += chunkSize;
         // Increment the local buffer pointer by number of bytes written
-        currentLocalPtr += chunkSize;
+        localBuf->start += chunkSize;
     }
     // Loop until the requested number of bytes are issued through IO
     while (nBytesWritten < nbytes) {
@@ -1382,7 +1368,7 @@ void Fam_Ops_Libfabric::put_nonblocking(void *local, Fam_Descriptor *descriptor,
             chunkSize = interleaveSize;
         // Issue an IO
         fabric_write(
-            keys[currentServerIndex], (void *)currentLocalPtr, chunkSize,
+            keys[currentServerIndex], localBuf, chunkSize,
             (uint64_t)(base_addr_list[currentServerIndex]) + currentFamPtr,
             (*fiAddr)[memServerIds[currentServerIndex]],
             get_context(descriptor), false);
@@ -1395,14 +1381,15 @@ void Fam_Ops_Libfabric::put_nonblocking(void *local, Fam_Descriptor *descriptor,
             currentFamPtr += interleaveSize;
         }
         // Increment the number of bytes written
-        currentLocalPtr += chunkSize;
+        localBuf->start += chunkSize;
         // Increment the local buffer pointer by number of bytes written
         nBytesWritten += chunkSize;
     }
     return;
 }
 
-void Fam_Ops_Libfabric::get_nonblocking(void *local, Fam_Descriptor *descriptor,
+void Fam_Ops_Libfabric::get_nonblocking(fam_buffer_info *localBuf,
+					Fam_Descriptor *descriptor,
                                         uint64_t offset, uint64_t nbytes) {
     uint64_t *memServerIds = descriptor->get_memserver_ids();
     size_t interleaveSize = descriptor->get_interleave_size();
@@ -1416,7 +1403,6 @@ void Fam_Ops_Libfabric::get_nonblocking(void *local, Fam_Descriptor *descriptor,
     // first block and the displacement within the block using the given offset,
     // else issue a single IO to a memory server where that dataitem is located.
     if (usedMemsrvCnt == 1) {
-        uint64_t currentLocal = (uint64_t)local;
         uint64_t currentOffset = offset;
         uint64_t currentNbytes = nbytes;
         uint64_t pending_nbytes;
@@ -1429,14 +1415,12 @@ void Fam_Ops_Libfabric::get_nonblocking(void *local, Fam_Descriptor *descriptor,
             }
 
             // Issue an IO
-            fabric_read(keys[0], (void *)currentLocal, currentNbytes,
+            fabric_read(keys[0], localBuf, currentNbytes,
                         (uint64_t)(base_addr_list[0]) + currentOffset,
                         (*fiAddr)[memServerIds[0]], famCtx, false);
             currentNbytes = pending_nbytes;
-            if (currentNbytes > 0) {
-                currentOffset = currentOffset + fabric_max_msg_size;
-                currentLocal = currentLocal + fabric_max_msg_size;
-            }
+	    currentOffset += fabric_max_msg_size;
+	    localBuf->start += fabric_max_msg_size;
         }
 
         return;
@@ -1448,8 +1432,6 @@ void Fam_Ops_Libfabric::get_nonblocking(void *local, Fam_Descriptor *descriptor,
     uint64_t currentFamPtr =
         (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
         interleaveSize;
-    // Current Local pointer position
-    uint64_t currentLocalPtr = (uint64_t)local;
     // Displacement from the starting position of the interleave block
     uint64_t displacement = offset % interleaveSize;
     uint64_t chunkSize;
@@ -1467,8 +1449,7 @@ void Fam_Ops_Libfabric::get_nonblocking(void *local, Fam_Descriptor *descriptor,
             chunkSize = firstBlockSize;
 
         // Issue an IO
-        fabric_read(keys[currentServerIndex], (void *)currentLocalPtr,
-                    chunkSize,
+        fabric_read(keys[currentServerIndex], localBuf, chunkSize,
                     (uint64_t)(base_addr_list[currentServerIndex]) +
                         currentFamPtr + displacement,
                     (*fiAddr)[memServerIds[currentServerIndex]],
@@ -1485,7 +1466,7 @@ void Fam_Ops_Libfabric::get_nonblocking(void *local, Fam_Descriptor *descriptor,
         // Increment the number of bytes read
         nBytesRead += chunkSize;
         // Increment the local buffer pointer by number of bytes read
-        currentLocalPtr += chunkSize;
+        localBuf->start += chunkSize;
     }
     // Loop until the requested number of bytes are issued through IO
     while (nBytesRead < nbytes) {
@@ -1497,7 +1478,7 @@ void Fam_Ops_Libfabric::get_nonblocking(void *local, Fam_Descriptor *descriptor,
             chunkSize = interleaveSize;
         // Issue an IO
         fabric_read(
-            keys[currentServerIndex], (void *)currentLocalPtr, chunkSize,
+            keys[currentServerIndex], localBuf, chunkSize,
             (uint64_t)(base_addr_list[currentServerIndex]) + currentFamPtr,
             (*fiAddr)[memServerIds[currentServerIndex]],
             get_context(descriptor), false);
@@ -1510,7 +1491,7 @@ void Fam_Ops_Libfabric::get_nonblocking(void *local, Fam_Descriptor *descriptor,
             currentFamPtr += interleaveSize;
         }
         // Increment the number of bytes read
-        currentLocalPtr += chunkSize;
+        localBuf->start += chunkSize;
         // Increment the local buffer pointer by number of bytes read
         nBytesRead += chunkSize;
     }
@@ -1518,7 +1499,7 @@ void Fam_Ops_Libfabric::get_nonblocking(void *local, Fam_Descriptor *descriptor,
 }
 
 void Fam_Ops_Libfabric::scatter_nonblocking(
-    void *local, Fam_Descriptor *descriptor, uint64_t nElements,
+    fam_buffer_info *localBuf, Fam_Descriptor *descriptor, uint64_t nElements,
     uint64_t firstElement, uint64_t stride, uint64_t elementSize) {
     uint64_t *memServerIds = descriptor->get_memserver_ids();
     size_t interleaveSize = descriptor->get_interleave_size();
@@ -1540,7 +1521,7 @@ void Fam_Ops_Libfabric::scatter_nonblocking(
                             message.str().c_str());
         }
         // Issue an IO
-        fabric_scatter_stride(keys[0], (void *)local, elementSize, firstElement,
+        fabric_scatter_stride(keys[0], localBuf, elementSize, firstElement,
                               nElements, stride, (*fiAddr)[memServerIds[0]],
                               famCtx, fabric_iov_limit,
                               (uint64_t)(base_addr_list[0]), false);
@@ -1549,8 +1530,6 @@ void Fam_Ops_Libfabric::scatter_nonblocking(
 
     // Initialize the offset to first element position
     uint64_t offset = firstElement * elementSize;
-    // Current Local pointer position
-    uint64_t currentLocalPtr = (uint64_t)local;
     for (int i = 0; i < (int)nElements; i++) {
         // Current memory server Id index
         uint64_t currentServerIndex =
@@ -1574,7 +1553,7 @@ void Fam_Ops_Libfabric::scatter_nonblocking(
             else
                 chunkSize = firstBlockSize;
             // Issue an IO
-            fabric_write(keys[currentServerIndex], (void *)currentLocalPtr,
+            fabric_write(keys[currentServerIndex], localBuf,
                          chunkSize,
                          (uint64_t)(base_addr_list[currentServerIndex]) +
                              currentFamPtr + displacement,
@@ -1592,7 +1571,7 @@ void Fam_Ops_Libfabric::scatter_nonblocking(
             // Increment the number of bytes written
             nBytesWritten += chunkSize;
             // Increment the local buffer pointer by number of bytes written
-            currentLocalPtr += chunkSize;
+            localBuf->start += chunkSize;
         }
         // Loop until the requested number of bytes are issued through IO
         while (nBytesWritten < elementSize) {
@@ -1604,7 +1583,7 @@ void Fam_Ops_Libfabric::scatter_nonblocking(
                 chunkSize = interleaveSize;
             // Issue an IO
             fabric_write(
-                keys[currentServerIndex], (void *)currentLocalPtr, chunkSize,
+                keys[currentServerIndex], localBuf, chunkSize,
                 (uint64_t)(base_addr_list[currentServerIndex]) + currentFamPtr,
                 (*fiAddr)[memServerIds[currentServerIndex]],
                 get_context(descriptor), false);
@@ -1617,7 +1596,7 @@ void Fam_Ops_Libfabric::scatter_nonblocking(
                 currentFamPtr += interleaveSize;
             }
             // Increment the number of bytes written
-            currentLocalPtr += chunkSize;
+            localBuf->start += chunkSize;
             // Increment the local buffer pointer by number of bytes written
             nBytesWritten += chunkSize;
         }
@@ -1627,7 +1606,7 @@ void Fam_Ops_Libfabric::scatter_nonblocking(
 }
 
 void Fam_Ops_Libfabric::gather_nonblocking(
-    void *local, Fam_Descriptor *descriptor, uint64_t nElements,
+    fam_buffer_info *localBuf, Fam_Descriptor *descriptor, uint64_t nElements,
     uint64_t firstElement, uint64_t stride, uint64_t elementSize) {
     uint64_t *memServerIds = descriptor->get_memserver_ids();
     size_t interleaveSize = descriptor->get_interleave_size();
@@ -1649,7 +1628,7 @@ void Fam_Ops_Libfabric::gather_nonblocking(
                             message.str().c_str());
         }
         // Issue an IO
-        fabric_gather_stride(keys[0], (void *)local, elementSize, firstElement,
+        fabric_gather_stride(keys[0], localBuf, elementSize, firstElement,
                              nElements, stride, (*fiAddr)[memServerIds[0]],
                              famCtx, fabric_iov_limit,
                              (uint64_t)(base_addr_list[0]), false);
@@ -1658,8 +1637,6 @@ void Fam_Ops_Libfabric::gather_nonblocking(
 
     // Initialize the offset to first element position
     uint64_t offset = firstElement * elementSize;
-    // Current Local pointer position
-    uint64_t currentLocalPtr = (uint64_t)local;
     for (int i = 0; i < (int)nElements; i++) {
         // Current memory server Id index
         uint64_t currentServerIndex =
@@ -1683,8 +1660,7 @@ void Fam_Ops_Libfabric::gather_nonblocking(
             else
                 chunkSize = firstBlockSize;
             // Issue an IO
-            fabric_read(keys[currentServerIndex], (void *)currentLocalPtr,
-                        chunkSize,
+            fabric_read(keys[currentServerIndex], localBuf, chunkSize,
                         (uint64_t)(base_addr_list[currentServerIndex]) +
                             currentFamPtr + displacement,
                         (*fiAddr)[memServerIds[currentServerIndex]],
@@ -1701,7 +1677,7 @@ void Fam_Ops_Libfabric::gather_nonblocking(
             // Increment the number of bytes read
             nBytesRead += chunkSize;
             // Increment the local buffer pointer by number of bytes read
-            currentLocalPtr += chunkSize;
+            localBuf->start += chunkSize;
         }
         // Loop until the requested number of bytes are issued through IO
         while (nBytesRead < elementSize) {
@@ -1713,7 +1689,7 @@ void Fam_Ops_Libfabric::gather_nonblocking(
                 chunkSize = interleaveSize;
             // Issue an IO
             fabric_read(
-                keys[currentServerIndex], (void *)currentLocalPtr, chunkSize,
+                keys[currentServerIndex], localBuf, chunkSize,
                 (uint64_t)(base_addr_list[currentServerIndex]) + currentFamPtr,
                 (*fiAddr)[memServerIds[currentServerIndex]],
                 get_context(descriptor), false);
@@ -1726,7 +1702,7 @@ void Fam_Ops_Libfabric::gather_nonblocking(
                 currentFamPtr += interleaveSize;
             }
             // Increment the number of bytes read
-            currentLocalPtr += chunkSize;
+            localBuf->start += chunkSize;
             // Increment the local buffer pointer by number of bytes read
             nBytesRead += chunkSize;
         }
@@ -1735,7 +1711,7 @@ void Fam_Ops_Libfabric::gather_nonblocking(
     return;
 }
 
-void Fam_Ops_Libfabric::scatter_nonblocking(void *local,
+void Fam_Ops_Libfabric::scatter_nonblocking(fam_buffer_info *localBuf,
                                             Fam_Descriptor *descriptor,
                                             uint64_t nElements,
                                             uint64_t *elementIndex,
@@ -1760,7 +1736,7 @@ void Fam_Ops_Libfabric::scatter_nonblocking(void *local,
                             message.str().c_str());
         }
         // Issue an IO
-        fabric_scatter_index(keys[0], (void *)local, elementSize, elementIndex,
+        fabric_scatter_index(keys[0], localBuf, elementSize, elementIndex,
                              nElements, (*fiAddr)[memServerIds[0]], famCtx,
                              fabric_iov_limit, (uint64_t)(base_addr_list[0]),
                              false);
@@ -1769,8 +1745,6 @@ void Fam_Ops_Libfabric::scatter_nonblocking(void *local,
 
     // iterate through the indeces provided by user
     uint64_t offset;
-    // Current Local pointer position
-    uint64_t currentLocalPtr = (uint64_t)local;
     for (int i = 0; i < (int)nElements; i++) {
         offset = elementIndex[i] * elementSize;
         // Current memory server Id index
@@ -1795,8 +1769,7 @@ void Fam_Ops_Libfabric::scatter_nonblocking(void *local,
             else
                 chunkSize = firstBlockSize;
             // Issue an IO
-            fabric_write(keys[currentServerIndex], (void *)currentLocalPtr,
-                         chunkSize,
+            fabric_write(keys[currentServerIndex], localBuf, chunkSize,
                          (uint64_t)(base_addr_list[currentServerIndex]) +
                              currentFamPtr + displacement,
                          (*fiAddr)[memServerIds[currentServerIndex]],
@@ -1813,7 +1786,7 @@ void Fam_Ops_Libfabric::scatter_nonblocking(void *local,
             // Increment the number of bytes written
             nBytesWritten += chunkSize;
             // Increment the local buffer pointer by number of bytes written
-            currentLocalPtr += chunkSize;
+            localBuf->start += chunkSize;
         }
         // Loop until the requested number of bytes are issued through IO
         while (nBytesWritten < elementSize) {
@@ -1825,7 +1798,7 @@ void Fam_Ops_Libfabric::scatter_nonblocking(void *local,
                 chunkSize = interleaveSize;
             // Issue an IO
             fabric_write(
-                keys[currentServerIndex], (void *)currentLocalPtr, chunkSize,
+                keys[currentServerIndex], localBuf, chunkSize,
                 (uint64_t)(base_addr_list[currentServerIndex]) + currentFamPtr,
                 (*fiAddr)[memServerIds[currentServerIndex]],
                 get_context(descriptor), false);
@@ -1838,7 +1811,7 @@ void Fam_Ops_Libfabric::scatter_nonblocking(void *local,
                 currentFamPtr += interleaveSize;
             }
             // Increment the number of bytes written
-            currentLocalPtr += chunkSize;
+            localBuf->start += chunkSize;
             // Increment the local buffer pointer by number of bytes written
             nBytesWritten += chunkSize;
         }
@@ -1846,7 +1819,7 @@ void Fam_Ops_Libfabric::scatter_nonblocking(void *local,
     return;
 }
 
-void Fam_Ops_Libfabric::gather_nonblocking(void *local,
+void Fam_Ops_Libfabric::gather_nonblocking(fam_buffer_info *localBuf,
                                            Fam_Descriptor *descriptor,
                                            uint64_t nElements,
                                            uint64_t *elementIndex,
@@ -1871,7 +1844,7 @@ void Fam_Ops_Libfabric::gather_nonblocking(void *local,
                             message.str().c_str());
         }
         // Issue an IO
-        fabric_gather_index(keys[0], (void *)local, elementSize, elementIndex,
+        fabric_gather_index(keys[0], localBuf, elementSize, elementIndex,
                             nElements, (*fiAddr)[memServerIds[0]], famCtx,
                             fabric_iov_limit, (uint64_t)(base_addr_list[0]),
                             false);
@@ -1880,8 +1853,6 @@ void Fam_Ops_Libfabric::gather_nonblocking(void *local,
 
     // iterate through the indeces provided by user
     uint64_t offset;
-    // Current Local pointer position
-    uint64_t currentLocalPtr = (uint64_t)local;
     for (int i = 0; i < (int)nElements; i++) {
         offset = elementIndex[i] * elementSize;
         // Current memory server Id index
@@ -1906,8 +1877,7 @@ void Fam_Ops_Libfabric::gather_nonblocking(void *local,
             else
                 chunkSize = firstBlockSize;
             // Issue IO
-            fabric_read(keys[currentServerIndex], (void *)currentLocalPtr,
-                        chunkSize,
+            fabric_read(keys[currentServerIndex], localBuf, chunkSize,
                         (uint64_t)(base_addr_list[currentServerIndex]) +
                             currentFamPtr + displacement,
                         (*fiAddr)[memServerIds[currentServerIndex]],
@@ -1924,7 +1894,7 @@ void Fam_Ops_Libfabric::gather_nonblocking(void *local,
             // Increment the number of bytes read
             nBytesRead += chunkSize;
             // Increment the local buffer pointer by number of bytes read
-            currentLocalPtr += chunkSize;
+            localBuf->start += chunkSize;
         }
         // Loop until the requested number of bytes are issued through IO
         while (nBytesRead < elementSize) {
@@ -1936,7 +1906,7 @@ void Fam_Ops_Libfabric::gather_nonblocking(void *local,
                 chunkSize = interleaveSize;
             // Issue an IO
             fabric_read(
-                keys[currentServerIndex], (void *)currentLocalPtr, chunkSize,
+                keys[currentServerIndex], localBuf, chunkSize,
                 (uint64_t)(base_addr_list[currentServerIndex]) + currentFamPtr,
                 (*fiAddr)[memServerIds[currentServerIndex]],
                 get_context(descriptor), false);
@@ -1949,7 +1919,7 @@ void Fam_Ops_Libfabric::gather_nonblocking(void *local,
                 currentFamPtr += interleaveSize;
             }
             // Increment the number of bytes read
-            currentLocalPtr += chunkSize;
+            localBuf->start += chunkSize;
             // Increment the local buffer pointer by number of bytes read
             nBytesRead += chunkSize;
         }
@@ -2061,20 +2031,23 @@ void Fam_Ops_Libfabric::check_progress(Fam_Region_Descriptor *descriptor) {
     return;
 }
 
-void Fam_Ops_Libfabric::atomic_set(Fam_Descriptor *descriptor, uint64_t offset,
-                                   int32_t value) {
+// Unfortunately, virtual template functions aren't a thing in C++ and I
+// am not seeing a way to use Policy-Based Design. So glue time.
+void Fam_Ops_Libfabric::atomic_nonfetch_op(
+    Fam_Descriptor *descriptor, uint64_t offset, void *value,
+    fi_op fiOp, fi_datatype fiType, size_t typeSize) {
     std::ostringstream message;
     uint64_t *memServerIds = descriptor->get_memserver_ids();
     size_t interleaveSize = descriptor->get_interleave_size();
     uint64_t *keys = descriptor->get_keys();
     uint64_t *base_addr_list = descriptor->get_base_address_list();
     uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
+    Fam_Context *famCtx = get_context(descriptor);
     std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
     if (usedMemsrvCnt == 1) {
         offset += (uint64_t)base_addr_list[0];
-        fabric_atomic(keys[0], (void *)&value, offset, FI_ATOMIC_WRITE,
-                      FI_INT32, (*fiAddr)[memServerIds[0]],
-                      get_context(descriptor));
+        fabric_atomic(keys[0], value, offset, fiOp, fiType,
+                      typeSize, (*fiAddr)[memServerIds[0]], famCtx);
         return;
     }
 
@@ -2087,8 +2060,8 @@ void Fam_Ops_Libfabric::atomic_set(Fam_Descriptor *descriptor, uint64_t offset,
     // Displacement from the starting position of the interleave block
     uint64_t displacement = offset % interleaveSize;
 
-    if (displacement + sizeof(int32_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
+    if (displacement + typeSize > interleaveSize) {
+        message << "Atomic operation can not be performed, size of the value "
                    "goes beyond interleave block";
         THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
     }
@@ -2097,27 +2070,27 @@ void Fam_Ops_Libfabric::atomic_set(Fam_Descriptor *descriptor, uint64_t offset,
     // Add displacement to remote FAM pointer
     currentFamPtr += displacement;
 
-    fabric_atomic(keys[currentServerIndex], (void *)&value, currentFamPtr,
-                  FI_ATOMIC_WRITE, FI_INT32,
-                  (*fiAddr)[memServerIds[currentServerIndex]],
-                  get_context(descriptor));
+    fabric_atomic(keys[currentServerIndex], value, currentFamPtr, fiOp, fiType,
+                  typeSize, (*fiAddr)[memServerIds[currentServerIndex]],
+                  famCtx);
     return;
 }
 
-void Fam_Ops_Libfabric::atomic_set(Fam_Descriptor *descriptor, uint64_t offset,
-                                   int64_t value) {
+void Fam_Ops_Libfabric::atomic_fetch_op(
+    Fam_Descriptor *descriptor, uint64_t offset, void *value, void *result,
+    fi_op fiOp, fi_datatype fiType, size_t typeSize) {
     std::ostringstream message;
     uint64_t *memServerIds = descriptor->get_memserver_ids();
     size_t interleaveSize = descriptor->get_interleave_size();
     uint64_t *keys = descriptor->get_keys();
     uint64_t *base_addr_list = descriptor->get_base_address_list();
     uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
+    Fam_Context *famCtx = get_context(descriptor);
     std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
     if (usedMemsrvCnt == 1) {
         offset += (uint64_t)base_addr_list[0];
-        fabric_atomic(keys[0], (void *)&value, offset, FI_ATOMIC_WRITE,
-                      FI_INT64, (*fiAddr)[memServerIds[0]],
-                      get_context(descriptor));
+        fabric_fetch_atomic(keys[0], value, result, offset, fiOp, fiType,
+                            typeSize, (*fiAddr)[memServerIds[0]], famCtx);
         return;
     }
 
@@ -2130,8 +2103,8 @@ void Fam_Ops_Libfabric::atomic_set(Fam_Descriptor *descriptor, uint64_t offset,
     // Displacement from the starting position of the interleave block
     uint64_t displacement = offset % interleaveSize;
 
-    if (displacement + sizeof(int64_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
+    if (displacement + typeSize > interleaveSize) {
+        message << "Atomic operation can not be performed, size of the value "
                    "goes beyond interleave block";
         THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
     }
@@ -2140,27 +2113,28 @@ void Fam_Ops_Libfabric::atomic_set(Fam_Descriptor *descriptor, uint64_t offset,
     // Add displacement to remote FAM pointer
     currentFamPtr += displacement;
 
-    fabric_atomic(keys[currentServerIndex], (void *)&value, currentFamPtr,
-                  FI_ATOMIC_WRITE, FI_INT64,
-                  (*fiAddr)[memServerIds[currentServerIndex]],
-                  get_context(descriptor));
+    fabric_fetch_atomic(keys[currentServerIndex], value, result,
+                        currentFamPtr, fiOp, fiType, typeSize,
+                        (*fiAddr)[memServerIds[currentServerIndex]], famCtx);
     return;
 }
 
-void Fam_Ops_Libfabric::atomic_set(Fam_Descriptor *descriptor, uint64_t offset,
-                                   uint32_t value) {
+void Fam_Ops_Libfabric::atomic_compare_op(
+    Fam_Descriptor *descriptor, uint64_t offset, void *value, void *result,
+    void *compare, fi_op fiOp, fi_datatype fiType, size_t typeSize) {
     std::ostringstream message;
     uint64_t *memServerIds = descriptor->get_memserver_ids();
     size_t interleaveSize = descriptor->get_interleave_size();
     uint64_t *keys = descriptor->get_keys();
     uint64_t *base_addr_list = descriptor->get_base_address_list();
     uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
+    Fam_Context *famCtx = get_context(descriptor);
     std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
     if (usedMemsrvCnt == 1) {
         offset += (uint64_t)base_addr_list[0];
-        fabric_atomic(keys[0], (void *)&value, offset, FI_ATOMIC_WRITE,
-                      FI_UINT32, (*fiAddr)[memServerIds[0]],
-                      get_context(descriptor));
+        fabric_compare_atomic(keys[0], value, result, compare, offset,
+                              fiOp, fiType, typeSize,
+                              (*fiAddr)[memServerIds[0]], famCtx);
         return;
     }
 
@@ -2173,8 +2147,8 @@ void Fam_Ops_Libfabric::atomic_set(Fam_Descriptor *descriptor, uint64_t offset,
     // Displacement from the starting position of the interleave block
     uint64_t displacement = offset % interleaveSize;
 
-    if (displacement + sizeof(uint32_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
+    if (displacement + typeSize > interleaveSize) {
+        message << "Atomic operation can not be performed, size of the value "
                    "goes beyond interleave block";
         THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
     }
@@ -2183,390 +2157,39 @@ void Fam_Ops_Libfabric::atomic_set(Fam_Descriptor *descriptor, uint64_t offset,
     // Add displacement to remote FAM pointer
     currentFamPtr += displacement;
 
-    fabric_atomic(keys[currentServerIndex], (void *)&value, currentFamPtr,
-                  FI_ATOMIC_WRITE, FI_UINT32,
-                  (*fiAddr)[memServerIds[currentServerIndex]],
-                  get_context(descriptor));
+    fabric_compare_atomic(keys[currentServerIndex], value, result, compare,
+                          currentFamPtr, fiOp, fiType, typeSize,
+                          (*fiAddr)[memServerIds[currentServerIndex]], famCtx);
     return;
 }
 
-void Fam_Ops_Libfabric::atomic_set(Fam_Descriptor *descriptor, uint64_t offset,
-                                   uint64_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_atomic(keys[0], (void *)&value, offset, FI_ATOMIC_WRITE,
-                      FI_UINT64, (*fiAddr)[memServerIds[0]],
-                      get_context(descriptor));
-        return;
+#define ATOMIC_NONFETCH_OP(_name, _fiOp, _fiType, _type)                \
+    void Fam_Ops_Libfabric::_name(Fam_Descriptor *descriptor,           \
+                                  uint64_t offset, _type value) {       \
+        atomic_nonfetch_op(descriptor, offset, (void *)&value,          \
+                           _fiOp, _fiType, sizeof(_type));              \
     }
 
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
+#define ATOMIC_NONFETCH_OP_STD_TYPES(_name, _fiOp)                      \
+    ATOMIC_NONFETCH_OP(_name, _fiOp, FI_INT32, int32_t)                 \
+    ATOMIC_NONFETCH_OP(_name, _fiOp, FI_UINT32, uint32_t)               \
+    ATOMIC_NONFETCH_OP(_name, _fiOp, FI_INT64, int64_t)                 \
+    ATOMIC_NONFETCH_OP(_name, _fiOp, FI_UINT64, uint64_t)               \
+    ATOMIC_NONFETCH_OP(_name, _fiOp, FI_FLOAT, float)                   \
+    ATOMIC_NONFETCH_OP(_name, _fiOp, FI_DOUBLE, double)
 
-    if (displacement + sizeof(uint64_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
+#define ATOMIC_NONFETCH_OP_BIT_TYPES(_name, _fiOp)                      \
+    ATOMIC_NONFETCH_OP(_name, _fiOp, FI_UINT32, uint32_t)               \
+    ATOMIC_NONFETCH_OP(_name, _fiOp, FI_UINT64, uint64_t)
 
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
+ATOMIC_NONFETCH_OP_STD_TYPES(atomic_set, FI_ATOMIC_WRITE)
+ATOMIC_NONFETCH_OP_STD_TYPES(atomic_add, FI_SUM)
+ATOMIC_NONFETCH_OP_STD_TYPES(atomic_min, FI_MIN)
+ATOMIC_NONFETCH_OP_STD_TYPES(atomic_max, FI_MAX)
 
-    fabric_atomic(keys[currentServerIndex], (void *)&value, currentFamPtr,
-                  FI_ATOMIC_WRITE, FI_UINT64,
-                  (*fiAddr)[memServerIds[currentServerIndex]],
-                  get_context(descriptor));
-    return;
-}
-
-void Fam_Ops_Libfabric::atomic_set(Fam_Descriptor *descriptor, uint64_t offset,
-                                   float value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_atomic(keys[0], (void *)&value, offset, FI_ATOMIC_WRITE,
-                      FI_FLOAT, (*fiAddr)[memServerIds[0]],
-                      get_context(descriptor));
-        return;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(float) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_atomic(keys[currentServerIndex], (void *)&value, currentFamPtr,
-                  FI_ATOMIC_WRITE, FI_FLOAT,
-                  (*fiAddr)[memServerIds[currentServerIndex]],
-                  get_context(descriptor));
-    return;
-}
-
-void Fam_Ops_Libfabric::atomic_set(Fam_Descriptor *descriptor, uint64_t offset,
-                                   double value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_atomic(keys[0], (void *)&value, offset, FI_ATOMIC_WRITE,
-                      FI_DOUBLE, (*fiAddr)[memServerIds[0]],
-                      get_context(descriptor));
-        return;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(double) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_atomic(keys[currentServerIndex], (void *)&value, currentFamPtr,
-                  FI_ATOMIC_WRITE, FI_DOUBLE,
-                  (*fiAddr)[memServerIds[currentServerIndex]],
-                  get_context(descriptor));
-    return;
-}
-
-void Fam_Ops_Libfabric::atomic_add(Fam_Descriptor *descriptor, uint64_t offset,
-                                   int32_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_atomic(keys[0], (void *)&value, offset, FI_SUM, FI_INT32,
-                      (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(int32_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_atomic(keys[currentServerIndex], (void *)&value, currentFamPtr,
-                  FI_SUM, FI_INT32, (*fiAddr)[memServerIds[currentServerIndex]],
-                  get_context(descriptor));
-    return;
-}
-
-void Fam_Ops_Libfabric::atomic_add(Fam_Descriptor *descriptor, uint64_t offset,
-                                   int64_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_atomic(keys[0], (void *)&value, offset, FI_SUM, FI_INT64,
-                      (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(int64_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_atomic(keys[currentServerIndex], (void *)&value, currentFamPtr,
-                  FI_SUM, FI_INT64, (*fiAddr)[memServerIds[currentServerIndex]],
-                  get_context(descriptor));
-    return;
-}
-
-void Fam_Ops_Libfabric::atomic_add(Fam_Descriptor *descriptor, uint64_t offset,
-                                   uint32_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_atomic(keys[0], (void *)&value, offset, FI_SUM, FI_UINT32,
-                      (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(uint32_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_atomic(keys[currentServerIndex], (void *)&value, currentFamPtr,
-                  FI_SUM, FI_UINT32,
-                  (*fiAddr)[memServerIds[currentServerIndex]],
-                  get_context(descriptor));
-    return;
-}
-
-void Fam_Ops_Libfabric::atomic_add(Fam_Descriptor *descriptor, uint64_t offset,
-                                   uint64_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_atomic(keys[0], (void *)&value, offset, FI_SUM, FI_UINT64,
-                      (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(uint64_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_atomic(keys[currentServerIndex], (void *)&value, currentFamPtr,
-                  FI_SUM, FI_UINT64,
-                  (*fiAddr)[memServerIds[currentServerIndex]],
-                  get_context(descriptor));
-    return;
-}
-
-void Fam_Ops_Libfabric::atomic_add(Fam_Descriptor *descriptor, uint64_t offset,
-                                   float value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_atomic(keys[0], (void *)&value, offset, FI_SUM, FI_FLOAT,
-                      (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(float) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_atomic(keys[currentServerIndex], (void *)&value, currentFamPtr,
-                  FI_SUM, FI_FLOAT, (*fiAddr)[memServerIds[currentServerIndex]],
-                  get_context(descriptor));
-    return;
-}
-
-void Fam_Ops_Libfabric::atomic_add(Fam_Descriptor *descriptor, uint64_t offset,
-                                   double value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_atomic(keys[0], (void *)&value, offset, FI_SUM, FI_DOUBLE,
-                      (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(double) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_atomic(keys[currentServerIndex], (void *)&value, currentFamPtr,
-                  FI_SUM, FI_DOUBLE,
-                  (*fiAddr)[memServerIds[currentServerIndex]],
-                  get_context(descriptor));
-    return;
-}
+ATOMIC_NONFETCH_OP_BIT_TYPES(atomic_and, FI_BAND)
+ATOMIC_NONFETCH_OP_BIT_TYPES(atomic_or, FI_BOR)
+ATOMIC_NONFETCH_OP_BIT_TYPES(atomic_xor, FI_BXOR)
 
 void Fam_Ops_Libfabric::atomic_subtract(Fam_Descriptor *descriptor,
                                         uint64_t offset, int32_t value) {
@@ -2604,1816 +2227,72 @@ void Fam_Ops_Libfabric::atomic_subtract(Fam_Descriptor *descriptor,
     return;
 }
 
-void Fam_Ops_Libfabric::atomic_min(Fam_Descriptor *descriptor, uint64_t offset,
-                                   int32_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_atomic(keys[0], (void *)&value, offset, FI_MIN, FI_INT32,
-                      (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(int32_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_atomic(keys[currentServerIndex], (void *)&value, currentFamPtr,
-                  FI_MIN, FI_INT32, (*fiAddr)[memServerIds[currentServerIndex]],
-                  get_context(descriptor));
-    return;
-}
-
-void Fam_Ops_Libfabric::atomic_min(Fam_Descriptor *descriptor, uint64_t offset,
-                                   int64_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_atomic(keys[0], (void *)&value, offset, FI_MIN, FI_INT64,
-                      (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(int64_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_atomic(keys[currentServerIndex], (void *)&value, currentFamPtr,
-                  FI_MIN, FI_INT64, (*fiAddr)[memServerIds[currentServerIndex]],
-                  get_context(descriptor));
-    return;
-}
-
-void Fam_Ops_Libfabric::atomic_min(Fam_Descriptor *descriptor, uint64_t offset,
-                                   uint32_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_atomic(keys[0], (void *)&value, offset, FI_MIN, FI_UINT32,
-                      (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(uint32_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_atomic(keys[currentServerIndex], (void *)&value, currentFamPtr,
-                  FI_MIN, FI_UINT32,
-                  (*fiAddr)[memServerIds[currentServerIndex]],
-                  get_context(descriptor));
-    return;
-}
-
-void Fam_Ops_Libfabric::atomic_min(Fam_Descriptor *descriptor, uint64_t offset,
-                                   uint64_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_atomic(keys[0], (void *)&value, offset, FI_MIN, FI_UINT64,
-                      (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(uint64_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_atomic(keys[currentServerIndex], (void *)&value, currentFamPtr,
-                  FI_MIN, FI_UINT64,
-                  (*fiAddr)[memServerIds[currentServerIndex]],
-                  get_context(descriptor));
-    return;
-}
-
-void Fam_Ops_Libfabric::atomic_min(Fam_Descriptor *descriptor, uint64_t offset,
-                                   float value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_atomic(keys[0], (void *)&value, offset, FI_MIN, FI_FLOAT,
-                      (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(float) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_atomic(keys[currentServerIndex], (void *)&value, currentFamPtr,
-                  FI_MIN, FI_FLOAT, (*fiAddr)[memServerIds[currentServerIndex]],
-                  get_context(descriptor));
-    return;
-}
-
-void Fam_Ops_Libfabric::atomic_min(Fam_Descriptor *descriptor, uint64_t offset,
-                                   double value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_atomic(keys[0], (void *)&value, offset, FI_MIN, FI_DOUBLE,
-                      (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(double) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_atomic(keys[currentServerIndex], (void *)&value, currentFamPtr,
-                  FI_MIN, FI_DOUBLE,
-                  (*fiAddr)[memServerIds[currentServerIndex]],
-                  get_context(descriptor));
-    return;
-}
-
-void Fam_Ops_Libfabric::atomic_max(Fam_Descriptor *descriptor, uint64_t offset,
-                                   int32_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_atomic(keys[0], (void *)&value, offset, FI_MAX, FI_INT32,
-                      (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(int32_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_atomic(keys[currentServerIndex], (void *)&value, currentFamPtr,
-                  FI_MAX, FI_INT32, (*fiAddr)[memServerIds[currentServerIndex]],
-                  get_context(descriptor));
-    return;
-}
-
-void Fam_Ops_Libfabric::atomic_max(Fam_Descriptor *descriptor, uint64_t offset,
-                                   int64_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_atomic(keys[0], (void *)&value, offset, FI_MAX, FI_INT64,
-                      (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(int64_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_atomic(keys[currentServerIndex], (void *)&value, currentFamPtr,
-                  FI_MAX, FI_INT64, (*fiAddr)[memServerIds[currentServerIndex]],
-                  get_context(descriptor));
-    return;
-}
-
-void Fam_Ops_Libfabric::atomic_max(Fam_Descriptor *descriptor, uint64_t offset,
-                                   uint32_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_atomic(keys[0], (void *)&value, offset, FI_MAX, FI_UINT32,
-                      (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(uint32_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_atomic(keys[currentServerIndex], (void *)&value, currentFamPtr,
-                  FI_MAX, FI_UINT32,
-                  (*fiAddr)[memServerIds[currentServerIndex]],
-                  get_context(descriptor));
-    return;
-}
-
-void Fam_Ops_Libfabric::atomic_max(Fam_Descriptor *descriptor, uint64_t offset,
-                                   uint64_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_atomic(keys[0], (void *)&value, offset, FI_MAX, FI_UINT64,
-                      (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(uint64_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_atomic(keys[currentServerIndex], (void *)&value, currentFamPtr,
-                  FI_MAX, FI_UINT64,
-                  (*fiAddr)[memServerIds[currentServerIndex]],
-                  get_context(descriptor));
-    return;
-}
-
-void Fam_Ops_Libfabric::atomic_max(Fam_Descriptor *descriptor, uint64_t offset,
-                                   float value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_atomic(keys[0], (void *)&value, offset, FI_MAX, FI_FLOAT,
-                      (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(float) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_atomic(keys[currentServerIndex], (void *)&value, currentFamPtr,
-                  FI_MAX, FI_FLOAT, (*fiAddr)[memServerIds[currentServerIndex]],
-                  get_context(descriptor));
-    return;
-}
-
-void Fam_Ops_Libfabric::atomic_max(Fam_Descriptor *descriptor, uint64_t offset,
-                                   double value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_atomic(keys[0], (void *)&value, offset, FI_MAX, FI_DOUBLE,
-                      (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(double) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_atomic(keys[currentServerIndex], (void *)&value, currentFamPtr,
-                  FI_MAX, FI_DOUBLE,
-                  (*fiAddr)[memServerIds[currentServerIndex]],
-                  get_context(descriptor));
-    return;
-}
-
-void Fam_Ops_Libfabric::atomic_and(Fam_Descriptor *descriptor, uint64_t offset,
-                                   uint32_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_atomic(keys[0], (void *)&value, offset, FI_BAND, FI_UINT32,
-                      (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(uint32_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_atomic(keys[currentServerIndex], (void *)&value, currentFamPtr,
-                  FI_BAND, FI_UINT32,
-                  (*fiAddr)[memServerIds[currentServerIndex]],
-                  get_context(descriptor));
-    return;
-}
-
-void Fam_Ops_Libfabric::atomic_and(Fam_Descriptor *descriptor, uint64_t offset,
-                                   uint64_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_atomic(keys[0], (void *)&value, offset, FI_BAND, FI_UINT64,
-                      (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(uint64_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_atomic(keys[currentServerIndex], (void *)&value, currentFamPtr,
-                  FI_BAND, FI_UINT64,
-                  (*fiAddr)[memServerIds[currentServerIndex]],
-                  get_context(descriptor));
-    return;
-}
-
-void Fam_Ops_Libfabric::atomic_or(Fam_Descriptor *descriptor, uint64_t offset,
-                                  uint32_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_atomic(keys[0], (void *)&value, offset, FI_BOR, FI_UINT32,
-                      (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(uint32_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_atomic(keys[currentServerIndex], (void *)&value, currentFamPtr,
-                  FI_BOR, FI_UINT32,
-                  (*fiAddr)[memServerIds[currentServerIndex]],
-                  get_context(descriptor));
-    return;
-}
-
-void Fam_Ops_Libfabric::atomic_or(Fam_Descriptor *descriptor, uint64_t offset,
-                                  uint64_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_atomic(keys[0], (void *)&value, offset, FI_BOR, FI_UINT64,
-                      (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(uint64_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_atomic(keys[currentServerIndex], (void *)&value, currentFamPtr,
-                  FI_BOR, FI_UINT64,
-                  (*fiAddr)[memServerIds[currentServerIndex]],
-                  get_context(descriptor));
-    return;
-}
-
-void Fam_Ops_Libfabric::atomic_xor(Fam_Descriptor *descriptor, uint64_t offset,
-                                   uint32_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_atomic(keys[0], (void *)&value, offset, FI_BXOR, FI_UINT32,
-                      (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(uint32_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_atomic(keys[currentServerIndex], (void *)&value, currentFamPtr,
-                  FI_BXOR, FI_UINT32,
-                  (*fiAddr)[memServerIds[currentServerIndex]],
-                  get_context(descriptor));
-    return;
-}
-
-void Fam_Ops_Libfabric::atomic_xor(Fam_Descriptor *descriptor, uint64_t offset,
-                                   uint64_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_atomic(keys[0], (void *)&value, offset, FI_BXOR, FI_UINT64,
-                      (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(uint64_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_atomic(keys[currentServerIndex], (void *)&value, currentFamPtr,
-                  FI_BXOR, FI_UINT64,
-                  (*fiAddr)[memServerIds[currentServerIndex]],
-                  get_context(descriptor));
-    return;
-}
-
-int32_t Fam_Ops_Libfabric::swap(Fam_Descriptor *descriptor, uint64_t offset,
-                                int32_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    int32_t old;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(
-            keys[0], (void *)&value, (void *)&old, offset, FI_ATOMIC_WRITE,
-            FI_INT32, (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return old;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(int32_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&value, (void *)&old,
-                        currentFamPtr, FI_ATOMIC_WRITE, FI_INT32,
-                        (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return old;
-}
-
-int64_t Fam_Ops_Libfabric::swap(Fam_Descriptor *descriptor, uint64_t offset,
-                                int64_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    int64_t old;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(
-            keys[0], (void *)&value, (void *)&old, offset, FI_ATOMIC_WRITE,
-            FI_INT64, (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return old;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(int64_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&value, (void *)&old,
-                        currentFamPtr, FI_ATOMIC_WRITE, FI_INT64,
-                        (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return old;
-}
-
-uint32_t Fam_Ops_Libfabric::swap(Fam_Descriptor *descriptor, uint64_t offset,
-                                 uint32_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    uint32_t old;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(
-            keys[0], (void *)&value, (void *)&old, offset, FI_ATOMIC_WRITE,
-            FI_UINT32, (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return old;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(uint32_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&value, (void *)&old,
-                        currentFamPtr, FI_ATOMIC_WRITE, FI_UINT32,
-                        (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return old;
-}
-
-uint64_t Fam_Ops_Libfabric::swap(Fam_Descriptor *descriptor, uint64_t offset,
-                                 uint64_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    uint64_t old;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(
-            keys[0], (void *)&value, (void *)&old, offset, FI_ATOMIC_WRITE,
-            FI_UINT64, (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return old;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(uint64_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&value, (void *)&old,
-                        currentFamPtr, FI_ATOMIC_WRITE, FI_UINT64,
-                        (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return old;
-}
-
-float Fam_Ops_Libfabric::swap(Fam_Descriptor *descriptor, uint64_t offset,
-                              float value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    float old;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(
-            keys[0], (void *)&value, (void *)&old, offset, FI_ATOMIC_WRITE,
-            FI_FLOAT, (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return old;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(float) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&value, (void *)&old,
-                        currentFamPtr, FI_ATOMIC_WRITE, FI_FLOAT,
-                        (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return old;
-}
-
-double Fam_Ops_Libfabric::swap(Fam_Descriptor *descriptor, uint64_t offset,
-                               double value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    double old;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(
-            keys[0], (void *)&value, (void *)&old, offset, FI_ATOMIC_WRITE,
-            FI_DOUBLE, (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return old;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(double) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&value, (void *)&old,
-                        currentFamPtr, FI_ATOMIC_WRITE, FI_DOUBLE,
-                        (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return old;
-}
-
-int32_t Fam_Ops_Libfabric::compare_swap(Fam_Descriptor *descriptor,
-                                        uint64_t offset, int32_t oldValue,
-                                        int32_t newValue) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    int32_t old;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_compare_atomic(keys[0], (void *)&oldValue, (void *)&old,
-                              (void *)&newValue, offset, FI_CSWAP, FI_INT32,
-                              (*fiAddr)[memServerIds[0]],
-                              get_context(descriptor));
-        return old;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(int32_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_compare_atomic(
-        keys[currentServerIndex], (void *)&oldValue, (void *)&old,
-        (void *)&newValue, currentFamPtr, FI_CSWAP, FI_INT32,
-        (*fiAddr)[memServerIds[currentServerIndex]], get_context(descriptor));
-    return old;
-}
-
-int64_t Fam_Ops_Libfabric::compare_swap(Fam_Descriptor *descriptor,
-                                        uint64_t offset, int64_t oldValue,
-                                        int64_t newValue) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    int64_t old;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_compare_atomic(keys[0], (void *)&oldValue, (void *)&old,
-                              (void *)&newValue, offset, FI_CSWAP, FI_INT64,
-                              (*fiAddr)[memServerIds[0]],
-                              get_context(descriptor));
-        return old;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(int64_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_compare_atomic(
-        keys[currentServerIndex], (void *)&oldValue, (void *)&old,
-        (void *)&newValue, currentFamPtr, FI_CSWAP, FI_INT64,
-        (*fiAddr)[memServerIds[currentServerIndex]], get_context(descriptor));
-    return old;
-}
-
-uint32_t Fam_Ops_Libfabric::compare_swap(Fam_Descriptor *descriptor,
-                                         uint64_t offset, uint32_t oldValue,
-                                         uint32_t newValue) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    uint32_t old;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_compare_atomic(keys[0], (void *)&oldValue, (void *)&old,
-                              (void *)&newValue, offset, FI_CSWAP, FI_UINT32,
-                              (*fiAddr)[memServerIds[0]],
-                              get_context(descriptor));
-        return old;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(uint32_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_compare_atomic(
-        keys[currentServerIndex], (void *)&oldValue, (void *)&old,
-        (void *)&newValue, currentFamPtr, FI_CSWAP, FI_UINT32,
-        (*fiAddr)[memServerIds[currentServerIndex]], get_context(descriptor));
-    return old;
-}
-
-uint64_t Fam_Ops_Libfabric::compare_swap(Fam_Descriptor *descriptor,
-                                         uint64_t offset, uint64_t oldValue,
-                                         uint64_t newValue) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    uint64_t old;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_compare_atomic(keys[0], (void *)&oldValue, (void *)&old,
-                              (void *)&newValue, offset, FI_CSWAP, FI_UINT64,
-                              (*fiAddr)[memServerIds[0]],
-                              get_context(descriptor));
-        return old;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(uint64_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_compare_atomic(
-        keys[currentServerIndex], (void *)&oldValue, (void *)&old,
-        (void *)&newValue, currentFamPtr, FI_CSWAP, FI_UINT64,
-        (*fiAddr)[memServerIds[currentServerIndex]], get_context(descriptor));
-    return old;
-}
-
-int128_t Fam_Ops_Libfabric::compare_swap(Fam_Descriptor *descriptor,
-                                         uint64_t offset, int128_t oldValue,
-                                         int128_t newValue) {
-
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    int128_t local;
-
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        famAllocator->acquire_CAS_lock(descriptor, memServerIds[0]);
-        try {
-            fabric_read(keys[0], &local, sizeof(int128_t), offset,
-                        (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        } catch (...) {
-            famAllocator->release_CAS_lock(descriptor, memServerIds[0]);
-            throw;
-        }
-
-        if (local == oldValue) {
-            try {
-                fabric_write(keys[0], &newValue, sizeof(int128_t), offset,
-                             (*fiAddr)[memServerIds[0]],
-                             get_context(descriptor));
-            } catch (...) {
-                famAllocator->release_CAS_lock(descriptor, memServerIds[0]);
-                throw;
-            }
-        }
-        famAllocator->release_CAS_lock(descriptor, memServerIds[0]);
-        return local;
-    }
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(int128_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    famAllocator->acquire_CAS_lock(descriptor,
-                                   memServerIds[currentServerIndex]);
-    try {
-        fabric_read(keys[currentServerIndex], &local, sizeof(int128_t),
-                    currentFamPtr, (*fiAddr)[memServerIds[currentServerIndex]],
-                    get_context(descriptor));
-    } catch (...) {
-        famAllocator->release_CAS_lock(descriptor,
-                                       memServerIds[currentServerIndex]);
-        throw;
-    }
-
-    if (local == oldValue) {
-        try {
-            fabric_write(keys[currentServerIndex], &newValue, sizeof(int128_t),
-                         currentFamPtr,
-                         (*fiAddr)[memServerIds[currentServerIndex]],
-                         get_context(descriptor));
-        } catch (...) {
-            famAllocator->release_CAS_lock(descriptor,
-                                           memServerIds[currentServerIndex]);
-            throw;
-        }
-    }
-    famAllocator->release_CAS_lock(descriptor,
-                                   memServerIds[currentServerIndex]);
-    return local;
-}
-
-int32_t Fam_Ops_Libfabric::atomic_fetch_int32(Fam_Descriptor *descriptor,
-                                              uint64_t offset) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    int32_t result;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(
-            keys[0], (void *)&result, (void *)&result, offset, FI_ATOMIC_READ,
-            FI_INT32, (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return result;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(int32_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&result,
-                        (void *)&result, currentFamPtr, FI_ATOMIC_READ,
-                        FI_INT32, (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return result;
-}
-
-int64_t Fam_Ops_Libfabric::atomic_fetch_int64(Fam_Descriptor *descriptor,
-                                              uint64_t offset) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    int64_t result;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(
-            keys[0], (void *)&result, (void *)&result, offset, FI_ATOMIC_READ,
-            FI_INT64, (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return result;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(int64_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&result,
-                        (void *)&result, currentFamPtr, FI_ATOMIC_READ,
-                        FI_INT64, (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return result;
-}
-
-uint32_t Fam_Ops_Libfabric::atomic_fetch_uint32(Fam_Descriptor *descriptor,
-                                                uint64_t offset) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    uint32_t result;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(
-            keys[0], (void *)&result, (void *)&result, offset, FI_ATOMIC_READ,
-            FI_UINT32, (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return result;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(uint32_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&result,
-                        (void *)&result, currentFamPtr, FI_ATOMIC_READ,
-                        FI_UINT32, (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return result;
-}
-
-uint64_t Fam_Ops_Libfabric::atomic_fetch_uint64(Fam_Descriptor *descriptor,
-                                                uint64_t offset) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    uint64_t result;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(
-            keys[0], (void *)&result, (void *)&result, offset, FI_ATOMIC_READ,
-            FI_UINT64, (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return result;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(uint64_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&result,
-                        (void *)&result, currentFamPtr, FI_ATOMIC_READ,
-                        FI_UINT64, (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return result;
-}
-
-float Fam_Ops_Libfabric::atomic_fetch_float(Fam_Descriptor *descriptor,
-                                            uint64_t offset) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    float result;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(
-            keys[0], (void *)&result, (void *)&result, offset, FI_ATOMIC_READ,
-            FI_FLOAT, (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return result;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(float) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&result,
-                        (void *)&result, currentFamPtr, FI_ATOMIC_READ,
-                        FI_FLOAT, (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return result;
-}
-
-double Fam_Ops_Libfabric::atomic_fetch_double(Fam_Descriptor *descriptor,
-                                              uint64_t offset) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    double result;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(
-            keys[0], (void *)&result, (void *)&result, offset, FI_ATOMIC_READ,
-            FI_DOUBLE, (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        return result;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(double) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&result,
-                        (void *)&result, currentFamPtr, FI_ATOMIC_READ,
-                        FI_DOUBLE, (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return result;
-}
-
-int32_t Fam_Ops_Libfabric::atomic_fetch_add(Fam_Descriptor *descriptor,
-                                            uint64_t offset, int32_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    int32_t old;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(keys[0], (void *)&value, (void *)&old, offset,
-                            FI_SUM, FI_INT32, (*fiAddr)[memServerIds[0]],
-                            get_context(descriptor));
-        return old;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(int32_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&value, (void *)&old,
-                        currentFamPtr, FI_SUM, FI_INT32,
-                        (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return old;
-}
-
-int64_t Fam_Ops_Libfabric::atomic_fetch_add(Fam_Descriptor *descriptor,
-                                            uint64_t offset, int64_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    int64_t old;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(keys[0], (void *)&value, (void *)&old, offset,
-                            FI_SUM, FI_INT64, (*fiAddr)[memServerIds[0]],
-                            get_context(descriptor));
-        return old;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(int64_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&value, (void *)&old,
-                        currentFamPtr, FI_SUM, FI_INT64,
-                        (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return old;
-}
-
-uint32_t Fam_Ops_Libfabric::atomic_fetch_add(Fam_Descriptor *descriptor,
-                                             uint64_t offset, uint32_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    uint32_t old;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(keys[0], (void *)&value, (void *)&old, offset,
-                            FI_SUM, FI_UINT32, (*fiAddr)[memServerIds[0]],
-                            get_context(descriptor));
-        return old;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(uint32_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&value, (void *)&old,
-                        currentFamPtr, FI_SUM, FI_UINT32,
-                        (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return old;
-}
-
-uint64_t Fam_Ops_Libfabric::atomic_fetch_add(Fam_Descriptor *descriptor,
-                                             uint64_t offset, uint64_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    uint64_t old;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(keys[0], (void *)&value, (void *)&old, offset,
-                            FI_SUM, FI_UINT64, (*fiAddr)[memServerIds[0]],
-                            get_context(descriptor));
-        return old;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(uint64_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&value, (void *)&old,
-                        currentFamPtr, FI_SUM, FI_UINT64,
-                        (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return old;
-}
-
-float Fam_Ops_Libfabric::atomic_fetch_add(Fam_Descriptor *descriptor,
-                                          uint64_t offset, float value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    float old;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(keys[0], (void *)&value, (void *)&old, offset,
-                            FI_SUM, FI_FLOAT, (*fiAddr)[memServerIds[0]],
-                            get_context(descriptor));
-        return old;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(float) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&value, (void *)&old,
-                        currentFamPtr, FI_SUM, FI_FLOAT,
-                        (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return old;
-}
-
-double Fam_Ops_Libfabric::atomic_fetch_add(Fam_Descriptor *descriptor,
-                                           uint64_t offset, double value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    double old;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(keys[0], (void *)&value, (void *)&old, offset,
-                            FI_SUM, FI_DOUBLE, (*fiAddr)[memServerIds[0]],
-                            get_context(descriptor));
-        return old;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(double) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&value, (void *)&old,
-                        currentFamPtr, FI_SUM, FI_DOUBLE,
-                        (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return old;
-}
+#define ATOMIC_FETCH_OP(_name, _fiOp, _fiType, _type)                   \
+    _type Fam_Ops_Libfabric::_name(Fam_Descriptor *descriptor,          \
+                                   uint64_t offset, _type value) {      \
+        _type result;                                                   \
+        atomic_fetch_op(descriptor, offset, (void *)&value,             \
+                        (void *)&result, _fiOp, _fiType, sizeof(_type));\
+        return result;                                                  \
+    }
+
+#define ATOMIC_FETCH_TYPE(_suffix, _fiType, _type)                      \
+    _type Fam_Ops_Libfabric::atomic_fetch_##_suffix(                    \
+        Fam_Descriptor *descriptor, uint64_t offset) {                  \
+        _type result;                                                   \
+        atomic_fetch_op(descriptor, offset, (void *)&result,            \
+                        (void *)&result,                                \
+                        FI_ATOMIC_READ, _fiType, sizeof(_type));        \
+        return result;                                                  \
+    }
+
+#define ATOMIC_FETCH_OP_STD_TYPES(_name, _fiOp)                         \
+    ATOMIC_FETCH_OP(_name, _fiOp, FI_INT32, int32_t)                    \
+    ATOMIC_FETCH_OP(_name, _fiOp, FI_UINT32, uint32_t)                  \
+    ATOMIC_FETCH_OP(_name, _fiOp, FI_INT64, int64_t)                    \
+    ATOMIC_FETCH_OP(_name, _fiOp, FI_UINT64, uint64_t)                  \
+    ATOMIC_FETCH_OP(_name, _fiOp, FI_FLOAT, float)                      \
+    ATOMIC_FETCH_OP(_name, _fiOp, FI_DOUBLE, double)
+
+#define ATOMIC_FETCH_OP_BIT_TYPES(_name, _fiOp)                         \
+    ATOMIC_FETCH_OP(_name, _fiOp, FI_UINT32, uint32_t)                  \
+    ATOMIC_FETCH_OP(_name, _fiOp, FI_UINT64, uint64_t)
+
+ATOMIC_FETCH_OP_STD_TYPES(swap, FI_ATOMIC_WRITE)
+ATOMIC_FETCH_OP_STD_TYPES(atomic_fetch_add, FI_SUM)
+ATOMIC_FETCH_OP_STD_TYPES(atomic_fetch_min, FI_MIN)
+ATOMIC_FETCH_OP_STD_TYPES(atomic_fetch_max, FI_MAX)
+
+ATOMIC_FETCH_OP_BIT_TYPES(atomic_fetch_and, FI_BAND)
+ATOMIC_FETCH_OP_BIT_TYPES(atomic_fetch_or, FI_BOR)
+ATOMIC_FETCH_OP_BIT_TYPES(atomic_fetch_xor, FI_BXOR)
+
+ATOMIC_FETCH_TYPE(int32, FI_INT32, int32_t)
+ATOMIC_FETCH_TYPE(uint32, FI_UINT32, uint32_t)
+ATOMIC_FETCH_TYPE(int64, FI_INT64, int64_t)
+ATOMIC_FETCH_TYPE(uint64, FI_UINT64, uint64_t)
+ATOMIC_FETCH_TYPE(float, FI_FLOAT, float)
+ATOMIC_FETCH_TYPE(double, FI_DOUBLE, double)
+
+#define ATOMIC_COMPARE_OP(_name, _fiOp, _fiType, _type)                 \
+    _type Fam_Ops_Libfabric::_name(Fam_Descriptor *descriptor,          \
+                                   uint64_t offset, _type oldValue,     \
+                                   _type newValue) {                    \
+        _type result;                                                   \
+        atomic_compare_op(descriptor, offset, (void *)&newValue,        \
+                          (void *)&result, (void *)&oldValue,           \
+                          _fiOp, _fiType, sizeof(_type));               \
+        return result;                                                  \
+    }
+
+#define ATOMIC_COMPARE_OP_STD_TYPES(_name, _fiOp)                       \
+    ATOMIC_COMPARE_OP(_name, _fiOp, FI_INT32, int32_t)                  \
+    ATOMIC_COMPARE_OP(_name, _fiOp, FI_UINT32, uint32_t)                \
+    ATOMIC_COMPARE_OP(_name, _fiOp, FI_INT64, int64_t)                  \
+    ATOMIC_COMPARE_OP(_name, _fiOp, FI_UINT64, uint64_t)
+
+ATOMIC_COMPARE_OP_STD_TYPES(compare_swap, FI_CSWAP)
+ATOMIC_COMPARE_OP(compare_swap, FI_CSWAP, FI_INT128, int128_t)
 
 int32_t Fam_Ops_Libfabric::atomic_fetch_subtract(Fam_Descriptor *descriptor,
                                                  uint64_t offset,
@@ -4449,915 +2328,25 @@ double Fam_Ops_Libfabric::atomic_fetch_subtract(Fam_Descriptor *descriptor,
     return atomic_fetch_add(descriptor, offset, -value);
 }
 
-int32_t Fam_Ops_Libfabric::atomic_fetch_min(Fam_Descriptor *descriptor,
-                                            uint64_t offset, int32_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    int32_t old;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(keys[0], (void *)&value, (void *)&old, offset,
-                            FI_MIN, FI_INT32, (*fiAddr)[memServerIds[0]],
-                            get_context(descriptor));
-        return old;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(int32_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&value, (void *)&old,
-                        currentFamPtr, FI_MIN, FI_INT32,
-                        (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return old;
-}
-
-int64_t Fam_Ops_Libfabric::atomic_fetch_min(Fam_Descriptor *descriptor,
-                                            uint64_t offset, int64_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    int64_t old;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(keys[0], (void *)&value, (void *)&old, offset,
-                            FI_MIN, FI_INT64, (*fiAddr)[memServerIds[0]],
-                            get_context(descriptor));
-        return old;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(int64_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&value, (void *)&old,
-                        currentFamPtr, FI_MIN, FI_INT64,
-                        (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return old;
-}
-
-uint32_t Fam_Ops_Libfabric::atomic_fetch_min(Fam_Descriptor *descriptor,
-                                             uint64_t offset, uint32_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    uint32_t old;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(keys[0], (void *)&value, (void *)&old, offset,
-                            FI_MIN, FI_UINT32, (*fiAddr)[memServerIds[0]],
-                            get_context(descriptor));
-        return old;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(uint32_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&value, (void *)&old,
-                        currentFamPtr, FI_MIN, FI_UINT32,
-                        (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return old;
-}
-
-uint64_t Fam_Ops_Libfabric::atomic_fetch_min(Fam_Descriptor *descriptor,
-                                             uint64_t offset, uint64_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    uint64_t old;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(keys[0], (void *)&value, (void *)&old, offset,
-                            FI_MIN, FI_UINT64, (*fiAddr)[memServerIds[0]],
-                            get_context(descriptor));
-        return old;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(uint64_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&value, (void *)&old,
-                        currentFamPtr, FI_MIN, FI_UINT64,
-                        (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return old;
-}
-
-float Fam_Ops_Libfabric::atomic_fetch_min(Fam_Descriptor *descriptor,
-                                          uint64_t offset, float value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    float old;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(keys[0], (void *)&value, (void *)&old, offset,
-                            FI_MIN, FI_FLOAT, (*fiAddr)[memServerIds[0]],
-                            get_context(descriptor));
-        return old;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(float) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&value, (void *)&old,
-                        currentFamPtr, FI_MIN, FI_FLOAT,
-                        (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return old;
-}
-
-double Fam_Ops_Libfabric::atomic_fetch_min(Fam_Descriptor *descriptor,
-                                           uint64_t offset, double value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    double old;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(keys[0], (void *)&value, (void *)&old, offset,
-                            FI_MIN, FI_DOUBLE, (*fiAddr)[memServerIds[0]],
-                            get_context(descriptor));
-        return old;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(double) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&value, (void *)&old,
-                        currentFamPtr, FI_MIN, FI_DOUBLE,
-                        (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return old;
-}
-
-int32_t Fam_Ops_Libfabric::atomic_fetch_max(Fam_Descriptor *descriptor,
-                                            uint64_t offset, int32_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    int32_t old;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(keys[0], (void *)&value, (void *)&old, offset,
-                            FI_MAX, FI_INT32, (*fiAddr)[memServerIds[0]],
-                            get_context(descriptor));
-        return old;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(int32_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&value, (void *)&old,
-                        currentFamPtr, FI_MAX, FI_INT32,
-                        (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return old;
-}
-
-int64_t Fam_Ops_Libfabric::atomic_fetch_max(Fam_Descriptor *descriptor,
-                                            uint64_t offset, int64_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    int64_t old;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(keys[0], (void *)&value, (void *)&old, offset,
-                            FI_MAX, FI_INT64, (*fiAddr)[memServerIds[0]],
-                            get_context(descriptor));
-        return old;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(int64_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&value, (void *)&old,
-                        currentFamPtr, FI_MAX, FI_INT64,
-                        (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return old;
-}
-
-uint32_t Fam_Ops_Libfabric::atomic_fetch_max(Fam_Descriptor *descriptor,
-                                             uint64_t offset, uint32_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    uint32_t old;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(keys[0], (void *)&value, (void *)&old, offset,
-                            FI_MAX, FI_UINT32, (*fiAddr)[memServerIds[0]],
-                            get_context(descriptor));
-        return old;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(uint32_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&value, (void *)&old,
-                        currentFamPtr, FI_MAX, FI_UINT32,
-                        (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return old;
-}
-
-uint64_t Fam_Ops_Libfabric::atomic_fetch_max(Fam_Descriptor *descriptor,
-                                             uint64_t offset, uint64_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    uint64_t old;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(keys[0], (void *)&value, (void *)&old, offset,
-                            FI_MAX, FI_UINT64, (*fiAddr)[memServerIds[0]],
-                            get_context(descriptor));
-        return old;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(uint64_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&value, (void *)&old,
-                        currentFamPtr, FI_MAX, FI_UINT64,
-                        (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return old;
-}
-
-float Fam_Ops_Libfabric::atomic_fetch_max(Fam_Descriptor *descriptor,
-                                          uint64_t offset, float value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    float old;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(keys[0], (void *)&value, (void *)&old, offset,
-                            FI_MAX, FI_FLOAT, (*fiAddr)[memServerIds[0]],
-                            get_context(descriptor));
-        return old;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(float) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&value, (void *)&old,
-                        currentFamPtr, FI_MAX, FI_FLOAT,
-                        (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return old;
-}
-
-double Fam_Ops_Libfabric::atomic_fetch_max(Fam_Descriptor *descriptor,
-                                           uint64_t offset, double value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    double old;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(keys[0], (void *)&value, (void *)&old, offset,
-                            FI_MAX, FI_DOUBLE, (*fiAddr)[memServerIds[0]],
-                            get_context(descriptor));
-        return old;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(double) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&value, (void *)&old,
-                        currentFamPtr, FI_MAX, FI_DOUBLE,
-                        (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return old;
-}
-
-uint32_t Fam_Ops_Libfabric::atomic_fetch_and(Fam_Descriptor *descriptor,
-                                             uint64_t offset, uint32_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    uint32_t old;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(keys[0], (void *)&value, (void *)&old, offset,
-                            FI_BAND, FI_UINT32, (*fiAddr)[memServerIds[0]],
-                            get_context(descriptor));
-        return old;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(uint32_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&value, (void *)&old,
-                        currentFamPtr, FI_BAND, FI_UINT32,
-                        (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return old;
-}
-
-uint64_t Fam_Ops_Libfabric::atomic_fetch_and(Fam_Descriptor *descriptor,
-                                             uint64_t offset, uint64_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    uint64_t old;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(keys[0], (void *)&value, (void *)&old, offset,
-                            FI_BAND, FI_UINT64, (*fiAddr)[memServerIds[0]],
-                            get_context(descriptor));
-        return old;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(uint64_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&value, (void *)&old,
-                        currentFamPtr, FI_BAND, FI_UINT64,
-                        (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return old;
-}
-
-uint32_t Fam_Ops_Libfabric::atomic_fetch_or(Fam_Descriptor *descriptor,
-                                            uint64_t offset, uint32_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    uint32_t old;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(keys[0], (void *)&value, (void *)&old, offset,
-                            FI_BOR, FI_UINT32, (*fiAddr)[memServerIds[0]],
-                            get_context(descriptor));
-        return old;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(uint32_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&value, (void *)&old,
-                        currentFamPtr, FI_BOR, FI_UINT32,
-                        (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return old;
-}
-
-uint64_t Fam_Ops_Libfabric::atomic_fetch_or(Fam_Descriptor *descriptor,
-                                            uint64_t offset, uint64_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    uint64_t old;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(keys[0], (void *)&value, (void *)&old, offset,
-                            FI_BOR, FI_UINT64, (*fiAddr)[memServerIds[0]],
-                            get_context(descriptor));
-        return old;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(uint64_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&value, (void *)&old,
-                        currentFamPtr, FI_BOR, FI_UINT64,
-                        (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return old;
-}
-
-uint32_t Fam_Ops_Libfabric::atomic_fetch_xor(Fam_Descriptor *descriptor,
-                                             uint64_t offset, uint32_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    uint32_t old;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(keys[0], (void *)&value, (void *)&old, offset,
-                            FI_BXOR, FI_UINT32, (*fiAddr)[memServerIds[0]],
-                            get_context(descriptor));
-        return old;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(uint32_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&value, (void *)&old,
-                        currentFamPtr, FI_BXOR, FI_UINT32,
-                        (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return old;
-}
-
-uint64_t Fam_Ops_Libfabric::atomic_fetch_xor(Fam_Descriptor *descriptor,
-                                             uint64_t offset, uint64_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    uint64_t old;
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        fabric_fetch_atomic(keys[0], (void *)&value, (void *)&old, offset,
-                            FI_BXOR, FI_UINT64, (*fiAddr)[memServerIds[0]],
-                            get_context(descriptor));
-        return old;
-    }
-
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(uint64_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    fabric_fetch_atomic(keys[currentServerIndex], (void *)&value, (void *)&old,
-                        currentFamPtr, FI_BXOR, FI_UINT64,
-                        (*fiAddr)[memServerIds[currentServerIndex]],
-                        get_context(descriptor));
-    return old;
-}
-
-void Fam_Ops_Libfabric::abort(int status) FAM_OPS_UNIMPLEMENTED(void__);
-
 void Fam_Ops_Libfabric::atomic_set(Fam_Descriptor *descriptor, uint64_t offset,
                                    int128_t value) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        famAllocator->acquire_CAS_lock(descriptor, memServerIds[0]);
-        try {
-            fabric_write(keys[0], &value, sizeof(int128_t), offset,
-                         (*fiAddr)[memServerIds[0]], get_context(descriptor),
-                         false);
-        } catch (...) {
-            famAllocator->release_CAS_lock(descriptor, memServerIds[0]);
-            throw;
-        }
-        famAllocator->release_CAS_lock(descriptor, memServerIds[0]);
-        return;
-    }
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
+    int128_t oldValue;
+    int128_t lastValue = 0;
 
-    if (displacement + sizeof(int128_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    famAllocator->acquire_CAS_lock(descriptor,
-                                   memServerIds[currentServerIndex]);
-    try {
-        fabric_write(keys[currentServerIndex], &value, sizeof(int128_t),
-                     currentFamPtr, (*fiAddr)[memServerIds[currentServerIndex]],
-                     get_context(descriptor), false);
-    } catch (...) {
-        famAllocator->release_CAS_lock(descriptor,
-                                       memServerIds[currentServerIndex]);
-        throw;
-    }
-    famAllocator->release_CAS_lock(descriptor,
-                                   memServerIds[currentServerIndex]);
+    /* Unfortunate to need to loop for this. */
+    do {
+        oldValue = lastValue;
+        lastValue = compare_swap(descriptor, offset, oldValue, value);
+    } while (lastValue != oldValue);
 }
 
 int128_t Fam_Ops_Libfabric::atomic_fetch_int128(Fam_Descriptor *descriptor,
                                                 uint64_t offset) {
-    std::ostringstream message;
-    uint64_t *memServerIds = descriptor->get_memserver_ids();
-    size_t interleaveSize = descriptor->get_interleave_size();
-    uint64_t *keys = descriptor->get_keys();
-    uint64_t *base_addr_list = descriptor->get_base_address_list();
-    uint64_t usedMemsrvCnt = descriptor->get_used_memsrv_cnt();
-
-    int128_t local;
-    std::vector<fi_addr_t> *fiAddr = get_fiAddrs();
-    if (usedMemsrvCnt == 1) {
-        offset += (uint64_t)base_addr_list[0];
-        famAllocator->acquire_CAS_lock(descriptor, memServerIds[0]);
-        try {
-            fabric_read(keys[0], &local, sizeof(int128_t), offset,
-                        (*fiAddr)[memServerIds[0]], get_context(descriptor));
-        } catch (...) {
-            famAllocator->release_CAS_lock(descriptor, memServerIds[0]);
-            throw;
-        }
-        famAllocator->release_CAS_lock(descriptor, memServerIds[0]);
-        return local;
-    }
-    // Current memory server Id index
-    uint64_t currentServerIndex = ((offset / interleaveSize) % usedMemsrvCnt);
-    // Current remote location in FAM
-    uint64_t currentFamPtr =
-        (((offset / interleaveSize) - currentServerIndex) / usedMemsrvCnt) *
-        interleaveSize;
-    // Displacement from the starting position of the interleave block
-    uint64_t displacement = offset % interleaveSize;
-
-    if (displacement + sizeof(int128_t) > interleaveSize) {
-        message << "Atmoic operation can not be performed, size of the value "
-                   "goes beyond interleave block";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-
-    currentFamPtr += (uint64_t)base_addr_list[currentServerIndex];
-    // Add displacement to remote FAM pointer
-    currentFamPtr += displacement;
-
-    famAllocator->acquire_CAS_lock(descriptor,
-                                   memServerIds[currentServerIndex]);
-    try {
-        fabric_read(keys[currentServerIndex], &local, sizeof(int128_t),
-                    currentFamPtr, (*fiAddr)[memServerIds[currentServerIndex]],
-                    get_context(descriptor));
-    } catch (...) {
-        famAllocator->release_CAS_lock(descriptor,
-                                       memServerIds[currentServerIndex]);
-        throw;
-    }
-    famAllocator->release_CAS_lock(descriptor,
-                                   memServerIds[currentServerIndex]);
-    return local;
+    int128_t zero = 0;
+    return compare_swap(descriptor, offset, zero, zero);
 }
+
+void Fam_Ops_Libfabric::abort(int status) FAM_OPS_UNIMPLEMENTED(void__);
 
 void Fam_Ops_Libfabric::context_open(uint64_t contextId, Fam_Ops *famOpsObj) {
     // Create a new fam_context
@@ -5399,7 +2388,53 @@ void Fam_Ops_Libfabric::context_close(uint64_t contextId) {
     }
     return;
 }
-void Fam_Ops_Libfabric::register_heap(void *base, size_t len) {
-    get_context()->register_heap(base, len, domain, fabric_iov_limit);
+
+void Fam_Ops_Libfabric::register_buffer(fam_buffer::Impl *fbimpl,
+					bool readOnly, bool remoteAccess) {
+
+    uint64_t key = 0;
+    struct fid_ep *ep = (remoteAccess ? ctxObj->get_ep() : nullptr);
+    int ret = fabric_register_mr((void *)fbimpl->regStart, fbimpl->regLen,
+				 &key, domain, ep, provider, !readOnly,
+				 fbimpl->mr);
+    if (ret < 0) {
+        fbimpl->mr = nullptr;
+	ostringstream message;
+	message << "fabric_register() failed: " << fabric_strerror(ret);
+	THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
+    }
+    /*
+    printf("%s:fbimpl %p %d %d 0x%lx 0x%lx %p 0x%lx\n", __func__, fbimpl,
+	   readOnly, remoteAccess,
+	   fbimpl->regStart, fbimpl->regLen, fbimpl->desc, fbimpl->rkey);
+    */
+    if (!remoteAccess)
+        return;
+
+    fbimpl->ep_addr_len = 0;
+    ret = fabric_getname_len(ep, &fbimpl->ep_addr_len);
+    if (ret != -FI_ETOOSMALL) {
+	ostringstream message;
+	message << "fabric_getname_len() failed: " << fabric_strerror(ret);
+	THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
+    }
+    fbimpl->ep_addr = new char[fbimpl->ep_addr_len];
+    ret = fabric_getname(ep, fbimpl->ep_addr, &fbimpl->ep_addr_len);
+    if (ret < 0) {
+	ostringstream message;
+	message << "fabric_getname() failed: " << fabric_strerror(ret);
+	THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
+    }
+}
+
+  void Fam_Ops_Libfabric::deregister_buffer(fam_buffer::Impl *fbimpl) {
+
+    //printf("%s:fbimpl %p\n", __func__, fbimpl);
+    if (fbimpl->mr)
+        fabric_deregister_mr(fbimpl->mr);
+    fbimpl->mr = nullptr;
+    if (fbimpl->ep_addr)
+      delete[] fbimpl->ep_addr;
+    fbimpl->ep_addr = nullptr;
 }
 } // namespace openfam

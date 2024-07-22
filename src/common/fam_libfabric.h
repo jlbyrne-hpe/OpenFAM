@@ -91,53 +91,61 @@ int fabric_register_mr(void *addr, size_t size, uint64_t *key,
 
 int fabric_deregister_mr(fid_mr *&mr);
 
-int fabric_write(uint64_t key, const void *local, size_t nbytes,
+int fabric_write(uint64_t key, struct fam_buffer_info *localBuf, size_t nbytes,
                  uint64_t offset, fi_addr_t fiAddr, Fam_Context *famCtx);
 
-int fabric_read(uint64_t key, const void *local, size_t nbytes, uint64_t offset,
-                fi_addr_t fiAddr, Fam_Context *famCtx);
+int fabric_read(uint64_t key, struct fam_buffer_info *localBuf, size_t nbytes,
+		uint64_t offset, fi_addr_t fiAddr, Fam_Context *famCtx);
 
 struct fi_context *
-fabric_write(std::vector<std::pair<iovec, fi_rma_iov>> ioInfo, fi_addr_t fiAddr,
-             Fam_Context *famCtx, size_t iov_limit, uint64_t base, bool block);
+fabric_write(std::vector<std::pair<iovec, fi_rma_iov>> ioInfo, void *desc,
+            fi_addr_t fiAddr, Fam_Context *famCtx,
+            size_t iov_limit, uint64_t base, bool block);
 
-struct fi_context *fabric_read(std::vector<std::pair<iovec, fi_rma_iov>> ioInfo,
-                               fi_addr_t fiAddr, Fam_Context *famCtx,
-                               size_t iov_limit, uint64_t base, bool block);
+struct fi_context *
+fabric_read(std::vector<std::pair<iovec, fi_rma_iov>> ioInfo, void *desc,
+            fi_addr_t fiAddr, Fam_Context *famCtx,
+            size_t iov_limit, uint64_t base, bool block);
 
-struct fi_context *fabric_scatter_stride(uint64_t key, const void *local,
+struct fi_context *fabric_scatter_stride(uint64_t key,
+                                         struct fam_buffer_info *localBuf,
                                          size_t nbytes, uint64_t first,
                                          uint64_t count, uint64_t stride,
                                          fi_addr_t fiAddr, Fam_Context *famCtx,
                                          size_t iov_limit, uint64_t base,
                                          bool block);
 
-struct fi_context *fabric_gather_stride(uint64_t key, const void *local,
+struct fi_context *fabric_gather_stride(uint64_t key,
+                                        struct fam_buffer_info *localBuf,
                                         size_t nbytes, uint64_t first,
                                         uint64_t count, uint64_t stride,
                                         fi_addr_t fiAddr, Fam_Context *famCtx,
                                         size_t iov_limit, uint64_t base,
                                         bool block);
 
-struct fi_context *fabric_scatter_index(uint64_t key, const void *local,
+struct fi_context *fabric_scatter_index(uint64_t key,
+                                        struct fam_buffer_info *localBuf,
                                         size_t nbytes, uint64_t *index,
                                         uint64_t count, fi_addr_t fiAddr,
                                         Fam_Context *famCtx, size_t iov_limit,
                                         uint64_t base, bool block);
 
-struct fi_context *fabric_gather_index(uint64_t key, const void *local,
+struct fi_context *fabric_gather_index(uint64_t key,
+                                       struct fam_buffer_info *localBuf,
                                        size_t nbytes, uint64_t *index,
                                        uint64_t count, fi_addr_t fiAddr,
                                        Fam_Context *famCtx, size_t iov_limit,
                                        uint64_t base, bool block);
 
-fi_context *fabric_write(uint64_t key, const void *local, size_t nbytes,
-                         uint64_t offset, fi_addr_t fiAddr, Fam_Context *famCtx,
-                         bool block);
+fi_context *
+fabric_write(uint64_t key, struct fam_buffer_info *localBuf, size_t nbytes,
+             uint64_t offset, fi_addr_t fiAddr, Fam_Context *famCtx,
+             bool block);
 
-fi_context *fabric_read(uint64_t key, const void *local, size_t nbytes,
-                        uint64_t offset, fi_addr_t fiAddr, Fam_Context *famCtx,
-                        bool block);
+fi_context *
+fabric_read(uint64_t key, struct fam_buffer_info *localBuf, size_t nbytes,
+            uint64_t offset, fi_addr_t fiAddr, Fam_Context *famCtx,
+            bool block);
 
 void fabric_fence(fi_addr_t fiAddr, Fam_Context *context);
 
@@ -150,18 +158,18 @@ int fabric_retry(Fam_Context *context, int ret, uint64_t *retry_cnt);
 int fabric_completion_wait(Fam_Context *famCtx, fi_context *ctx, int ioType);
 
 void fabric_atomic(uint64_t key, void *value, uint64_t offset, enum fi_op op,
-                   enum fi_datatype datatype, fi_addr_t fiAddr,
+                   enum fi_datatype datatype, size_t typeSize, fi_addr_t fiAddr,
                    Fam_Context *famCtx);
 
 void fabric_fetch_atomic(uint64_t key, void *value, void *result,
                          uint64_t offset, enum fi_op op,
-                         enum fi_datatype datatype, fi_addr_t fiAddr,
-                         Fam_Context *famCtx);
+                         enum fi_datatype datatype, size_t typeSize,
+			 fi_addr_t fiAddr, Fam_Context *famCtx);
 
 void fabric_compare_atomic(uint64_t key, void *value, void *result,
                            void *compare, uint64_t offset, enum fi_op op,
-                           enum fi_datatype datatype, fi_addr_t fiAddr,
-                           Fam_Context *famCtx);
+                           enum fi_datatype datatype, size_t typeSize,
+			   fi_addr_t fiAddr, Fam_Context *famCtx);
 
 const char *fabric_strerror(int fabErr);
 

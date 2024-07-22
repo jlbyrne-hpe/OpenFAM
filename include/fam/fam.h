@@ -68,10 +68,13 @@
 #ifndef FAM_H_
 #define FAM_H_
 
+#include <stdlib.h>   // for size_t
 #include <stdint.h>   // needed for uint64_t etc.
 #include <sys/stat.h> // needed for mode_t
 
 #ifdef __cplusplus
+#include <memory>
+
 namespace openfam {
 extern "C" {
 #endif
@@ -360,6 +363,8 @@ class Fam_Region_Descriptor {
  */
 
 class fam_context;
+class fam_buffer;
+struct fam_buffer_info;
 
 class fam {
   public:
@@ -572,6 +577,9 @@ class fam {
     void fam_get_blocking(void *local, Fam_Descriptor *descriptor,
                           uint64_t offset, uint64_t nbytes);
 
+    void fam_get_blocking(fam_buffer *local, Fam_Descriptor *descriptor,
+                          uint64_t offset, uint64_t nbytes);
+
     /**
      * Initiate a copy of data from FAM to node local memory. Do not wait until
      * copy is finished
@@ -584,6 +592,9 @@ class fam {
      * @return - none
      */
     void fam_get_nonblocking(void *local, Fam_Descriptor *descriptor,
+                             uint64_t offset, uint64_t nbytes);
+
+    void fam_get_nonblocking(fam_buffer *local, Fam_Descriptor *descriptor,
                              uint64_t offset, uint64_t nbytes);
 
     /**
@@ -599,6 +610,9 @@ class fam {
     void fam_put_blocking(void *local, Fam_Descriptor *descriptor,
                           uint64_t offset, uint64_t nbytes);
 
+    void fam_put_blocking(fam_buffer *local, Fam_Descriptor *descriptor,
+                          uint64_t offset, uint64_t nbytes);
+
     /**
      * Initiate a copy of data from local memory to FAM, returning before copy
      * is complete
@@ -611,6 +625,9 @@ class fam {
      * @return - none
      */
     void fam_put_nonblocking(void *local, Fam_Descriptor *descriptor,
+                             uint64_t offset, uint64_t nbytes);
+
+    void fam_put_nonblocking(fam_buffer *local, Fam_Descriptor *descriptor,
                              uint64_t offset, uint64_t nbytes);
 
     // LOAD/STORE sub-group
@@ -658,6 +675,10 @@ class fam {
                              uint64_t nElements, uint64_t firstElement,
                              uint64_t stride, uint64_t elementSize);
 
+    void fam_gather_blocking(fam_buffer *local, Fam_Descriptor *descriptor,
+                             uint64_t nElements, uint64_t firstElement,
+                             uint64_t stride, uint64_t elementSize);
+
     /**
      * Gather data from FAM to local memory, blocking while copy is complete
      * Gathers disjoint elements within a data item in FAM to a contiguous array
@@ -674,6 +695,10 @@ class fam {
      * @see #fam_scatter_indexed
      */
     void fam_gather_blocking(void *local, Fam_Descriptor *descriptor,
+                             uint64_t nElements, uint64_t *elementIndex,
+                             uint64_t elementSize);
+
+    void fam_gather_blocking(fam_buffer *local, Fam_Descriptor *descriptor,
                              uint64_t nElements, uint64_t *elementIndex,
                              uint64_t elementSize);
 
@@ -698,6 +723,10 @@ class fam {
                                 uint64_t nElements, uint64_t firstElement,
                                 uint64_t stride, uint64_t elementSize);
 
+    void fam_gather_nonblocking(fam_buffer *local, Fam_Descriptor *descriptor,
+                                uint64_t nElements, uint64_t firstElement,
+                                uint64_t stride, uint64_t elementSize);
+
     /**
      * Gather data from FAM to local memory, blocking while copy is complete
      * Gathers disjoint elements within a data item in FAM to a contiguous array
@@ -714,6 +743,10 @@ class fam {
      * @see #fam_scatter_indexed
      */
     void fam_gather_nonblocking(void *local, Fam_Descriptor *descriptor,
+                                uint64_t nElements, uint64_t *elementIndex,
+                                uint64_t elementSize);
+
+    void fam_gather_nonblocking(fam_buffer *local, Fam_Descriptor *descriptor,
                                 uint64_t nElements, uint64_t *elementIndex,
                                 uint64_t elementSize);
 
@@ -737,6 +770,10 @@ class fam {
                               uint64_t nElements, uint64_t firstElement,
                               uint64_t stride, uint64_t elementSize);
 
+    void fam_scatter_blocking(fam_buffer *local, Fam_Descriptor *descriptor,
+                              uint64_t nElements, uint64_t firstElement,
+                              uint64_t stride, uint64_t elementSize);
+
     /**
      * Scatter data from local memory to FAM.
      * Scatters data from a contiguous array in local memory to disjoint
@@ -752,6 +789,10 @@ class fam {
      * @see #fam_gather_indexed
      */
     void fam_scatter_blocking(void *local, Fam_Descriptor *descriptor,
+                              uint64_t nElements, uint64_t *elementIndex,
+                              uint64_t elementSize);
+
+    void fam_scatter_blocking(fam_buffer *local, Fam_Descriptor *descriptor,
                               uint64_t nElements, uint64_t *elementIndex,
                               uint64_t elementSize);
 
@@ -775,6 +816,10 @@ class fam {
                                  uint64_t nElements, uint64_t firstElement,
                                  uint64_t stride, uint64_t elementSize);
 
+    void fam_scatter_nonblocking(fam_buffer *local, Fam_Descriptor *descriptor,
+                                 uint64_t nElements, uint64_t firstElement,
+                                 uint64_t stride, uint64_t elementSize);
+
     /**
      * Initiate a scatter data from local memory to FAM.
      * Scatters data from a contiguous array in local memory to disjoint
@@ -790,6 +835,10 @@ class fam {
      * @see #fam_gather_indexed
      */
     void fam_scatter_nonblocking(void *local, Fam_Descriptor *descriptor,
+                                 uint64_t nElements, uint64_t *elementIndex,
+                                 uint64_t elementSize);
+
+    void fam_scatter_nonblocking(fam_buffer *local, Fam_Descriptor *descriptor,
                                  uint64_t nElements, uint64_t *elementIndex,
                                  uint64_t elementSize);
 
@@ -1261,6 +1310,10 @@ class fam {
     void fam_reset_profile();
 #endif
 
+    fam_buffer *fam_buffer_register(void *start, size_t len,
+                                    bool readOnly = false,
+                                    bool remoteAccess = false);
+
     /**
      * fam() - constructor for fam class
      */
@@ -1274,6 +1327,11 @@ class fam {
   protected:
     class Impl_;
     Impl_ *pimpl_;
+
+  private:
+    void fill_buffer_info(fam_buffer_info *localBuf, void *local, size_t len);
+    void fill_buffer_info(fam_buffer_info *localBuf, fam_buffer *local,
+                          size_t len);
 };
 
 class fam_context : public fam {
@@ -1305,6 +1363,62 @@ class fam_context : public fam {
                                 mode_t accessPermissions);
     fam_context *fam_context_open();
     void fam_context_close(fam_context *);
+    fam_buffer *fam_buffer_register(void *start, size_t len,
+                                    bool readOnly = false,
+                                    bool remoteAccess = false);
+    void fam_buffer_deregister(fam_buffer *bufObj);
+};
+
+class fam_buffer {
+
+  public:
+    class Impl;
+    std::shared_ptr<Impl> fbimpl;
+
+    fam_buffer() {
+        fbimpl = nullptr;
+        start_ = 0;
+        len_ = 0;
+        off_ = 0;
+        desc_ = nullptr;
+    }
+    fam_buffer(fam_buffer *orig, size_t off = 0);
+    fam_buffer(fam_buffer::Impl *fbimpl);
+    ~fam_buffer() {}
+
+    size_t get_offset(void) {
+        return off_;
+    }
+
+    uintptr_t get_start(void) {
+        return start_ + off_;
+    }
+
+    size_t get_len(void) {
+        return len_ - off_;
+    }
+
+    void *get_desc(void) {
+        return desc_;
+    }
+
+    void set_offset(uintptr_t off);
+
+    uint64_t get_rkey(void);
+
+    size_t get_ep_addr_len(void);
+
+    void *get_ep_addr(void);
+
+    void check_bounds(uintptr_t opStart, size_t opLen);
+
+    void check_bounds(void *start, size_t len);
+
+  private:
+    uintptr_t start_;
+    size_t len_;
+    size_t off_;
+    void *desc_;
 };
 
 } // namespace openfam

@@ -437,6 +437,12 @@ inline string protocol_map(string provider) {
     return protocol;
 }
 
+struct fam_buffer_info {
+    uintptr_t start;
+    size_t len;
+    void *desc;
+};
+
 } // namespace openfam
 
 #endif /* end of C/C11 Headers */

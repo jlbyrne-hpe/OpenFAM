@@ -44,6 +44,8 @@ using namespace openfam;
 fam *my_fam;
 Fam_Options fam_opts;
 
+void *null = nullptr;
+
 // Test case 1 - put get negative test.
 TEST(FamPutGetT, PutGetFail) {
     Fam_Region_Descriptor *desc;
@@ -116,15 +118,15 @@ TEST(FamPutGetT, PutGetFail) {
 #endif
 
     // Pass invalid option
-    EXPECT_THROW(my_fam->fam_put_blocking(NULL, item, 0, 13), Fam_Exception);
+    EXPECT_THROW(my_fam->fam_put_blocking(null, item, 0, 13), Fam_Exception);
     EXPECT_THROW(my_fam->fam_put_blocking(local, NULL, 0, 13), Fam_Exception);
-    EXPECT_THROW(my_fam->fam_get_blocking(NULL, item, 0, 13), Fam_Exception);
+    EXPECT_THROW(my_fam->fam_get_blocking(null, item, 0, 13), Fam_Exception);
     EXPECT_THROW(my_fam->fam_get_blocking(local2, NULL, 0, 13), Fam_Exception);
 
-    EXPECT_THROW(my_fam->fam_put_nonblocking(NULL, item, 0, 13), Fam_Exception);
+    EXPECT_THROW(my_fam->fam_put_nonblocking(null, item, 0, 13), Fam_Exception);
     EXPECT_THROW(my_fam->fam_put_nonblocking(local, NULL, 0, 13),
                  Fam_Exception);
-    EXPECT_THROW(my_fam->fam_get_nonblocking(NULL, item, 0, 13), Fam_Exception);
+    EXPECT_THROW(my_fam->fam_get_nonblocking(null, item, 0, 13), Fam_Exception);
     EXPECT_THROW(my_fam->fam_get_nonblocking(local2, NULL, 0, 13),
                  Fam_Exception);
 
@@ -196,19 +198,19 @@ TEST(FamPutGetT, ScatterGatherIndexFail) {
     // Pass invalid option
     cout << " Pass invalid option" << endl;
     EXPECT_THROW(
-        my_fam->fam_gather_blocking(NULL, item, 5, indexes, sizeof(int)),
+        my_fam->fam_gather_blocking(null, item, 5, indexes, sizeof(int)),
         Fam_Exception);
 
     EXPECT_THROW(
-        my_fam->fam_gather_nonblocking(NULL, item, 5, indexes, sizeof(int)),
+        my_fam->fam_gather_nonblocking(null, item, 5, indexes, sizeof(int)),
         Fam_Exception);
 
     EXPECT_THROW(
-        my_fam->fam_scatter_blocking(NULL, item, 5, indexes, sizeof(int)),
+        my_fam->fam_scatter_blocking(null, item, 5, indexes, sizeof(int)),
         Fam_Exception);
 
     EXPECT_THROW(
-        my_fam->fam_scatter_nonblocking(NULL, item, 5, indexes, sizeof(int)),
+		 my_fam->fam_scatter_nonblocking(null, item, 5, indexes, sizeof(int)),
         Fam_Exception);
 
     EXPECT_THROW(
@@ -305,18 +307,18 @@ TEST(FamPutGetT, ScatterGatherStrideFail) {
 
     // Pass invalid option
     cout << "Pass invalid option" << endl;
-    EXPECT_THROW(my_fam->fam_gather_blocking(NULL, item, 5, 2, 3, sizeof(int)),
+    EXPECT_THROW(my_fam->fam_gather_blocking(null, item, 5, 2, 3, sizeof(int)),
                  Fam_Exception);
 
     EXPECT_THROW(
-        my_fam->fam_gather_nonblocking(NULL, item, 5, 2, 3, sizeof(int)),
+        my_fam->fam_gather_nonblocking(null, item, 5, 2, 3, sizeof(int)),
         Fam_Exception);
 
-    EXPECT_THROW(my_fam->fam_scatter_blocking(NULL, item, 5, 2, 3, sizeof(int)),
+    EXPECT_THROW(my_fam->fam_scatter_blocking(null, item, 5, 2, 3, sizeof(int)),
                  Fam_Exception);
 
     EXPECT_THROW(
-        my_fam->fam_scatter_nonblocking(NULL, item, 5, 2, 3, sizeof(int)),
+        my_fam->fam_scatter_nonblocking(null, item, 5, 2, 3, sizeof(int)),
         Fam_Exception);
 
     EXPECT_THROW(

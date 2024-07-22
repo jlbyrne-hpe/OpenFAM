@@ -104,45 +104,51 @@ class Fam_Ops_Libfabric : public Fam_Ops {
 
     void abort(int status);
 
-    int put_blocking(void *local, Fam_Descriptor *descriptor, uint64_t offset,
-                     uint64_t nbytes);
-    int get_blocking(void *local, Fam_Descriptor *descriptor, uint64_t offset,
-                     uint64_t nbytes);
-    int gather_blocking(void *local, Fam_Descriptor *descriptor,
+    int put_blocking(fam_buffer_info *localBuf, Fam_Descriptor *descriptor,
+		     uint64_t offset, uint64_t nbytes);
+
+    int get_blocking(fam_buffer_info *localBuf, Fam_Descriptor *descriptor,
+		     uint64_t offset, uint64_t nbytes);
+
+    int gather_blocking(fam_buffer_info *localBuf, Fam_Descriptor *descriptor,
                         uint64_t nElements, uint64_t firstElement,
                         uint64_t stride, uint64_t elementSize);
 
-    int gather_blocking(void *local, Fam_Descriptor *descriptor,
+    int gather_blocking(fam_buffer_info *localBuf, Fam_Descriptor *descriptor,
                         uint64_t nElements, uint64_t *elementIndex,
                         uint64_t elementSize);
 
-    int scatter_blocking(void *local, Fam_Descriptor *descriptor,
+    int scatter_blocking(fam_buffer_info *localBuf, Fam_Descriptor *descriptor,
                          uint64_t nElements, uint64_t firstElement,
                          uint64_t stride, uint64_t elementSize);
 
-    int scatter_blocking(void *local, Fam_Descriptor *descriptor,
+    int scatter_blocking(fam_buffer_info *localBuf, Fam_Descriptor *descriptor,
                          uint64_t nElements, uint64_t *elementIndex,
                          uint64_t elementSize);
 
-    void put_nonblocking(void *local, Fam_Descriptor *descriptor,
+    void put_nonblocking(fam_buffer_info *localBuf, Fam_Descriptor *descriptor,
                          uint64_t offset, uint64_t nbytes);
 
-    void get_nonblocking(void *local, Fam_Descriptor *descriptor,
+    void get_nonblocking(fam_buffer_info *localBuf, Fam_Descriptor *descriptor,
                          uint64_t offset, uint64_t nbytes);
 
-    void gather_nonblocking(void *local, Fam_Descriptor *descriptor,
+    void gather_nonblocking(fam_buffer_info *localBuf,
+                            Fam_Descriptor *descriptor,
                             uint64_t nElements, uint64_t firstElement,
                             uint64_t stride, uint64_t elementSize);
 
-    void gather_nonblocking(void *local, Fam_Descriptor *descriptor,
+    void gather_nonblocking(fam_buffer_info *localBuf,
+                            Fam_Descriptor *descriptor,
                             uint64_t nElements, uint64_t *elementIndex,
                             uint64_t elementSize);
 
-    void scatter_nonblocking(void *local, Fam_Descriptor *descriptor,
+    void scatter_nonblocking(fam_buffer_info *localBuf,
+                             Fam_Descriptor *descriptor,
                              uint64_t nElements, uint64_t firstElement,
                              uint64_t stride, uint64_t elementSize);
 
-    void scatter_nonblocking(void *local, Fam_Descriptor *descriptor,
+    void scatter_nonblocking(fam_buffer_info *localBuf,
+                             Fam_Descriptor *descriptor,
                              uint64_t nElements, uint64_t *elementIndex,
                              uint64_t elementSize);
 
@@ -368,7 +374,13 @@ class Fam_Ops_Libfabric : public Fam_Ops {
 
     uint64_t get_context_id() { return ctxId; };
 
+    void register_buffer(fam_buffer::Impl *fbimpl,
+                         bool readOnly, bool remoteAccess);
+
+    void deregister_buffer(fam_buffer::Impl *fbimpl);
+
     void set_context_id(uint64_t contextID) { ctxId = contextID; };
+
     Fam_Context *get_context() { return ctxObj; };
     void set_context(Fam_Context *ctx) { ctxObj = ctx; };
 
@@ -409,7 +421,6 @@ class Fam_Ops_Libfabric : public Fam_Ops {
 
     size_t get_fabric_iov_limit() { return fabric_iov_limit; }
     size_t get_fabric_max_msg_size() { return fabric_max_msg_size; }
-    void register_heap(void *base, size_t len);
 
   protected:
     // Server_Map name;
@@ -445,6 +456,18 @@ class Fam_Ops_Libfabric : public Fam_Ops {
     Fam_Context_Model famContextModel;
     Fam_Allocator_Client *famAllocator;
     Fam_Context *ctxObj;
+
+    void atomic_nonfetch_op(Fam_Descriptor *descriptor, uint64_t offset,
+                            void *value, fi_op fiOp, fi_datatype fiType,
+                            size_t typeSize);
+
+    void atomic_fetch_op(Fam_Descriptor *descriptor, uint64_t offset,
+                         void *value, void *result, fi_op fiOp,
+                         fi_datatype fiType, size_t typeSize);
+
+    void atomic_compare_op(Fam_Descriptor *descriptor, uint64_t offset,
+                           void *value, void *result, void *compare,
+                           fi_op fiOp, fi_datatype fiType, size_t typeSize);
 };
 } // namespace openfam
 #endif
