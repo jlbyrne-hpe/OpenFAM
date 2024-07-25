@@ -566,7 +566,7 @@ int fabric_getname(struct fid_ep *ep, void *addr, size_t *addrSize) {
  * @param domain - pointer to struct fid_domain
  * @param ep - pointer to struct fid_ep; if NULL, then local only registration
  * @param provider - Name of provider, needed for provider-specific handling
- * @param rw - true => read/write ; false => read-only
+ * @param rw - true => read/write ; false => read-only (put only)
  * @param mr - Used toreturn new mr
  * @return - {>= 0 success, errNo(<0)}
  */
@@ -1622,14 +1622,24 @@ void fabric_atomic(uint64_t key, void *value, uint64_t offset, enum fi_op op,
                    enum fi_datatype datatype, size_t typeSize, fi_addr_t fiAddr,
                    Fam_Context *famCtx) {
 
-    memcpy(&famCtx->atomic_buffer[0], value, typeSize);
-    struct fi_ioc iov = {.addr = &famCtx->atomic_buffer[0], .count = 1};
+    void **ourDesc = NULL;
+    void *ourValuePtr = value;
+    // If we're doing FAM_THREAD_MULTIPLE, either we can't use the
+    // famCtx->atomic_buffer or we need locking. Given that for verbs or cxi
+    // locking may be done in libfabric on the  domain mr-cache. For optimum
+    // performance use FAM_THREAD_SERIALIZE.
+    if (famCtx->famThreadModel == FAM_THREAD_SERIALIZE) {
+        ourDesc = &famCtx->atomic_desc;
+        ourValuePtr = &famCtx->atomic_buffer[0];
+        memcpy(ourValuePtr, value, typeSize);
+    }
+    struct fi_ioc iov = {.addr = ourValuePtr, .count = 1};
 
     struct fi_rma_ioc rma_iov = {.addr = offset, .count = 1, .key = key};
 
     struct fi_msg_atomic msg = {
         .msg_iov = &iov,
-        .desc = &famCtx->atomic_desc,
+        .desc = ourDesc,
         .iov_count = 1,
         .addr = fiAddr,
         .rma_iov = &rma_iov,
@@ -1667,12 +1677,24 @@ void fabric_fetch_atomic(uint64_t key, void *value, void *result,
                          enum fi_datatype datatype, size_t typeSize,
                          fi_addr_t fiAddr, Fam_Context *famCtx) {
 
-    memcpy(&famCtx->atomic_buffer[0], value, typeSize);
-    struct fi_ioc iov = {.addr = value, .count = 1};
+    void **ourDesc = NULL;
+    void *ourValuePtr = value;
+    void *ourResultPtr = result;
+    // If we're doing FAM_THREAD_MULTIPLE, either we can't use the
+    // famCtx->atomic_buffer or we need locking. Given that for verbs or cxi
+    // locking may be done in libfabric on the  domain mr-cache. For optimum
+    // performance use FAM_THREAD_SERIALIZE.
+    if (famCtx->famThreadModel == FAM_THREAD_SERIALIZE) {
+        ourDesc = &famCtx->atomic_desc;
+        ourValuePtr = &famCtx->atomic_buffer[0];
+        ourResultPtr = &famCtx->atomic_buffer[1];
+        memcpy(ourValuePtr, value, typeSize);
+    }
+    struct fi_ioc iov = {.addr = ourValuePtr, .count = 1};
 
     struct fi_rma_ioc rma_iov = {.addr = offset, .count = 1, .key = key};
 
-    struct fi_ioc result_iov = {.addr = &famCtx->atomic_buffer[1], .count = 1};
+    struct fi_ioc result_iov = {.addr = ourResultPtr, .count = 1};
 
     struct fam_fi_context *ctx = new struct fam_fi_context();
     memset(ctx, 0, sizeof(struct fam_fi_context));
@@ -1680,7 +1702,7 @@ void fabric_fetch_atomic(uint64_t key, void *value, void *result,
 
     struct fi_msg_atomic msg = {
         .msg_iov = &iov,
-        .desc = &famCtx->atomic_desc,
+        .desc = ourDesc,
         .iov_count = 1,
         .addr = fiAddr,
         .rma_iov = &rma_iov,
@@ -1700,7 +1722,7 @@ void fabric_fetch_atomic(uint64_t key, void *value, void *result,
     try {
         do {
             FI_CALL(ret, fi_fetch_atomicmsg, famCtx->get_ep(), &msg,
-                    &result_iov, &famCtx->atomic_desc, 1, FI_COMPLETION);
+                    &result_iov, ourDesc, 1, FI_COMPLETION);
         } while (fabric_retry(famCtx, ret, &retry_cnt));
         famCtx->inc_num_rx_ops();
         incr++;
@@ -1717,7 +1739,8 @@ void fabric_fetch_atomic(uint64_t key, void *value, void *result,
 
     delete ctx;
 
-    memcpy(result, &famCtx->atomic_buffer[1], typeSize);
+    if (famCtx->famThreadModel == FAM_THREAD_SERIALIZE)
+        memcpy(result, ourResultPtr, typeSize);
 
     return;
 }
@@ -1727,15 +1750,29 @@ void fabric_compare_atomic(uint64_t key, void *value, void *result,
                            enum fi_datatype datatype, size_t typeSize,
                            fi_addr_t fiAddr, Fam_Context *famCtx) {
 
-    memcpy(&famCtx->atomic_buffer[0], value, typeSize);
-    struct fi_ioc iov = {.addr = &famCtx->atomic_buffer[0], .count = 1};
+    void **ourDesc = NULL;
+    void *ourValuePtr = value;
+    void *ourResultPtr = result;
+    void *ourComparePtr = compare;
+    // If we're doing FAM_THREAD_MULTIPLE, either we can't use the
+    // famCtx->atomic_buffer or we need locking. Given that for verbs or cxi
+    // locking may be done in libfabric on the  domain mr-cache. For optimum
+    // performance use FAM_THREAD_SERIALIZE.
+    if (famCtx->famThreadModel == FAM_THREAD_SERIALIZE) {
+        ourDesc = &famCtx->atomic_desc;
+        ourValuePtr = &famCtx->atomic_buffer[0];
+        ourResultPtr = &famCtx->atomic_buffer[1];
+        ourComparePtr = &famCtx->atomic_buffer[2];
+        memcpy(ourValuePtr, value, typeSize);
+	memcpy(ourComparePtr, compare, typeSize);
+    }
+    struct fi_ioc iov = {.addr = ourValuePtr, .count = 1};
 
     struct fi_rma_ioc rma_iov = {.addr = offset, .count = 1, .key = key};
 
-    struct fi_ioc result_iov = {.addr = &famCtx->atomic_buffer[1], .count = 1};
+    struct fi_ioc result_iov = {.addr = ourResultPtr, .count = 1};
 
-    memcpy(&famCtx->atomic_buffer[2], compare, typeSize);
-    struct fi_ioc compare_iov = {.addr = &famCtx->atomic_buffer[2], .count = 1};
+    struct fi_ioc compare_iov = {.addr = ourComparePtr, .count = 1};
 
     struct fam_fi_context *ctx = new struct fam_fi_context();
     memset(ctx, 0, sizeof(struct fam_fi_context));
@@ -1743,7 +1780,7 @@ void fabric_compare_atomic(uint64_t key, void *value, void *result,
 
     struct fi_msg_atomic msg = {
         .msg_iov = &iov,
-        .desc = &famCtx->atomic_desc,
+        .desc = ourDesc,
         .iov_count = 1,
         .addr = fiAddr,
         .rma_iov = &rma_iov,
@@ -1763,8 +1800,8 @@ void fabric_compare_atomic(uint64_t key, void *value, void *result,
     try {
         do {
             FI_CALL(ret, fi_compare_atomicmsg, famCtx->get_ep(), &msg,
-                    &compare_iov, &famCtx->atomic_desc, 1,
-                    &result_iov, &famCtx->atomic_desc, 1, FI_COMPLETION);
+                    &compare_iov, ourDesc, 1,
+                    &result_iov, ourDesc, 1, FI_COMPLETION);
 
         } while (fabric_retry(famCtx, ret, &retry_cnt));
         famCtx->inc_num_rx_ops();
@@ -1782,7 +1819,8 @@ void fabric_compare_atomic(uint64_t key, void *value, void *result,
 
     delete ctx;
 
-    memcpy(result, &famCtx->atomic_buffer[1], typeSize);
+    if (famCtx->famThreadModel == FAM_THREAD_SERIALIZE)
+        memcpy(result, ourResultPtr, typeSize);
 
     return;
 }

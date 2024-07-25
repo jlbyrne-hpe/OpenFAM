@@ -1331,7 +1331,7 @@ class fam {
   private:
     void fill_buffer_info(fam_buffer_info *localBuf, void *local, size_t len);
     void fill_buffer_info(fam_buffer_info *localBuf, fam_buffer *local,
-                          size_t len);
+                          size_t len, bool localWrite = true);
 };
 
 class fam_context : public fam {
@@ -1373,14 +1373,15 @@ class fam_buffer {
 
   public:
     class Impl;
-    std::shared_ptr<Impl> fbimpl;
+    std::shared_ptr<Impl> pfbimpl;
 
     fam_buffer() {
-        fbimpl = nullptr;
+        pfbimpl = nullptr;
         start_ = 0;
         len_ = 0;
         off_ = 0;
         desc_ = nullptr;
+	readOnly_ = true;
     }
     fam_buffer(fam_buffer *orig, size_t off = 0);
     fam_buffer(fam_buffer::Impl *fbimpl);
@@ -1402,13 +1403,17 @@ class fam_buffer {
         return desc_;
     }
 
+    bool get_readOnly(void) {
+        return readOnly_;
+    }
+
     void set_offset(uintptr_t off);
 
-    uint64_t get_rkey(void);
+    uint64_t get_rKey(void);
 
-    size_t get_ep_addr_len(void);
+    size_t get_epAddrLen(void);
 
-    void *get_ep_addr(void);
+    void *get_epAddr(void);
 
     void check_bounds(uintptr_t opStart, size_t opLen);
 
@@ -1419,6 +1424,7 @@ class fam_buffer {
     size_t len_;
     size_t off_;
     void *desc_;
+    bool readOnly_;
 };
 
 } // namespace openfam

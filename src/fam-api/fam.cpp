@@ -133,7 +133,8 @@ class fam::Impl_ {
             famOps = new Fam_Ops_Libfabric((Fam_Ops_Libfabric *)pimpl->famOps);
             ctxId = famOps->get_context_id();
             pimpl->famOps->context_open(ctxId, famOps);
-            registeredHeap = new fam_buffer(pimpl->registeredHeap);
+	    if (pimpl->registeredHeap)
+                registeredHeap = new fam_buffer(pimpl->registeredHeap);
         }
         famAllocator = pimpl->famAllocator;
         famRuntime = pimpl->famRuntime;
@@ -691,7 +692,7 @@ void fam::Impl_::fam_reset_profile() {
 #endif
 
 fam_buffer *fam::Impl_::fam_buffer_register(void *start, size_t len,
-					    bool readOnly, bool remoteAccess)
+                                            bool readOnly, bool remoteAccess)
 {
     if (start == NULL || len == 0)
         THROW_ERR_MSG(Fam_InvalidOption_Exception, "Invalid Options");
@@ -5847,7 +5848,7 @@ void fam::fam_put_blocking(fam_buffer *local, Fam_Descriptor *descriptor,
                            uint64_t offset, uint64_t nbytes) {
     TRY_CATCH_BEGIN
     fam_buffer_info localBuf;
-    fill_buffer_info(&localBuf, local, nbytes);
+    fill_buffer_info(&localBuf, local, nbytes, false);
     pimpl_->fam_put_blocking(&localBuf, descriptor, offset, nbytes);
     RETURN_WITH_FAM_EXCEPTION
 }
@@ -5879,7 +5880,7 @@ void fam::fam_put_nonblocking(fam_buffer *local, Fam_Descriptor *descriptor,
                               uint64_t offset, uint64_t nbytes) {
     TRY_CATCH_BEGIN
     fam_buffer_info localBuf;
-    fill_buffer_info(&localBuf, local, nbytes);
+    fill_buffer_info(&localBuf, local, nbytes, false);
     pimpl_->fam_put_nonblocking(&localBuf, descriptor, offset, nbytes);
     RETURN_WITH_FAM_EXCEPTION
 }
@@ -6130,7 +6131,7 @@ void fam::fam_scatter_blocking(fam_buffer *local, Fam_Descriptor *descriptor,
     TRY_CATCH_BEGIN
     fam_buffer_info localBuf;
     size_t nbytes = nElements * elementSize;
-    fill_buffer_info(&localBuf, local, nbytes);
+    fill_buffer_info(&localBuf, local, nbytes, false);
     pimpl_->fam_scatter_blocking(&localBuf, descriptor, nElements, firstElement,
                                  stride, elementSize);
     RETURN_WITH_FAM_EXCEPTION
@@ -6174,7 +6175,7 @@ void fam::fam_scatter_blocking(fam_buffer *local, Fam_Descriptor *descriptor,
     TRY_CATCH_BEGIN
     fam_buffer_info localBuf;
     size_t nbytes = nElements * elementSize;
-    fill_buffer_info(&localBuf, local, nbytes);
+    fill_buffer_info(&localBuf, local, nbytes, false);
     pimpl_->fam_scatter_blocking(&localBuf, descriptor, nElements, elementIndex,
                                  elementSize);
     RETURN_WITH_FAM_EXCEPTION
@@ -6218,7 +6219,7 @@ void fam::fam_scatter_nonblocking(fam_buffer *local, Fam_Descriptor *descriptor,
     TRY_CATCH_BEGIN
     fam_buffer_info localBuf;
     size_t nbytes = nElements * elementSize;
-    fill_buffer_info(&localBuf, local, nbytes);
+    fill_buffer_info(&localBuf, local, nbytes, false);
     pimpl_->fam_scatter_nonblocking(&localBuf, descriptor, nElements,
                                     firstElement, stride, elementSize);
     RETURN_WITH_FAM_EXCEPTION
@@ -6261,7 +6262,7 @@ void fam::fam_scatter_nonblocking(fam_buffer *local, Fam_Descriptor *descriptor,
     TRY_CATCH_BEGIN
     fam_buffer_info localBuf;
     size_t nbytes = nElements * elementSize;
-    fill_buffer_info(&localBuf, local, nbytes);
+    fill_buffer_info(&localBuf, local, nbytes, false);
     pimpl_->fam_scatter_nonblocking(&localBuf, descriptor, nElements,
                                     elementIndex, elementSize);
     RETURN_WITH_FAM_EXCEPTION
@@ -7172,15 +7173,14 @@ fam_buffer *fam::fam_buffer_register(void *start, size_t len,
 }
 
 void fam::fill_buffer_info(fam_buffer_info *localBuf, void *local, size_t len) {
-    if (local == NULL || len == 0)
+  if (local == NULL || len == 0)
         THROW_ERR_MSG(Fam_InvalidOption_Exception, "Invalid Options");
-
     pimpl_->fill_buffer_info(localBuf, (uintptr_t)local, len);
 }
 
 void fam::fill_buffer_info(fam_buffer_info *localBuf, fam_buffer *local,
-                           size_t len) {
-    if (local == NULL || len == 0)
+                           size_t len, bool localWrite) {
+    if (local == NULL || len == 0 || (localWrite && local->get_readOnly()))
         THROW_ERR_MSG(Fam_InvalidOption_Exception, "Invalid Options");
     pimpl_->fill_buffer_info(localBuf, local->get_start(), len, local);
 }

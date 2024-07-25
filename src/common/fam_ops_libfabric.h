@@ -374,10 +374,9 @@ class Fam_Ops_Libfabric : public Fam_Ops {
 
     uint64_t get_context_id() { return ctxId; };
 
-    void register_buffer(fam_buffer::Impl *fbimpl,
-                         bool readOnly, bool remoteAccess);
+    void register_buffer(fam_buffer::Impl *pfbimpl, bool remoteAccess);
 
-    void deregister_buffer(fam_buffer::Impl *fbimpl);
+    void deregister_buffer(fam_buffer::Impl *pfbimpl);
 
     void set_context_id(uint64_t contextID) { ctxId = contextID; };
 

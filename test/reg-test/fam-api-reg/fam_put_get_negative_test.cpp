@@ -183,7 +183,7 @@ TEST(FamPutGetT, ScatterGatherIndexFail) {
     EXPECT_THROW(my_fam->fam_quiet(), Fam_Exception);
 
     // No read permission
-	cout << "No read permission" << endl;
+    // cout << "No read permission" << endl;
     EXPECT_NO_THROW(my_fam->fam_change_permissions(item, 0333));
 
     EXPECT_NO_THROW(
@@ -196,7 +196,7 @@ TEST(FamPutGetT, ScatterGatherIndexFail) {
     EXPECT_NO_THROW(my_fam->fam_change_permissions(item, 0777));
 
     // Pass invalid option
-    cout << " Pass invalid option" << endl;
+    // cout << " Pass invalid option" << endl;
     EXPECT_THROW(
         my_fam->fam_gather_blocking(null, item, 5, indexes, sizeof(int)),
         Fam_Exception);
@@ -230,7 +230,7 @@ TEST(FamPutGetT, ScatterGatherIndexFail) {
                  Fam_Exception);
 
     // Pass 0 as nelements
-    cout << " Pass 0 as nelements" << endl;
+    // cout << " Pass 0 as nelements" << endl;
     EXPECT_THROW(
         my_fam->fam_gather_blocking(local2, item, 0, indexes, sizeof(int)),
         Fam_Exception);
@@ -283,7 +283,7 @@ TEST(FamPutGetT, ScatterGatherStrideFail) {
     int *local2 = (int *)malloc(100 * sizeof(int));
 
     // No write perm
-    cout << "No write perm" << endl;
+    // cout << "No write perm" << endl;
     EXPECT_THROW(
         my_fam->fam_scatter_blocking(newLocal, item, 5, 2, 3, sizeof(int)),
         Fam_Exception);
@@ -293,7 +293,7 @@ TEST(FamPutGetT, ScatterGatherStrideFail) {
     EXPECT_THROW(my_fam->fam_quiet(), Fam_Exception);
 
     // No read permission
-    cout << "No read permission" << endl;
+    // cout << "No read permission" << endl;
     EXPECT_NO_THROW(my_fam->fam_change_permissions(item, 0333));
 
     EXPECT_NO_THROW(
@@ -306,7 +306,7 @@ TEST(FamPutGetT, ScatterGatherStrideFail) {
     EXPECT_NO_THROW(my_fam->fam_change_permissions(item, 0777));
 
     // Pass invalid option
-    cout << "Pass invalid option" << endl;
+    // cout << "Pass invalid option" << endl;
     EXPECT_THROW(my_fam->fam_gather_blocking(null, item, 5, 2, 3, sizeof(int)),
                  Fam_Exception);
 
@@ -338,7 +338,7 @@ TEST(FamPutGetT, ScatterGatherStrideFail) {
         Fam_Exception);
 
     // Pass 0 as nelements
-    cout << "Pass 0 as nelements" << endl;
+    // cout << "Pass 0 as nelements" << endl;
     EXPECT_THROW(
         my_fam->fam_gather_blocking(local2, item, 0, 2, 3, sizeof(int)),
         Fam_Exception);

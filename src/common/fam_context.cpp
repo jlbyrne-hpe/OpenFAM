@@ -139,23 +139,21 @@ Fam_Context::Fam_Context(struct fi_info *fi, struct fid_domain *domain,
         THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
     }
 
-    atomic_buffer = ((union Fam_Atomic_Types *)
-                     aligned_alloc(CACHE_LINE_SIZE, ATOMIC_BUFFER_SIZE));
-    if (ret < 0) {
-        message << "Fam libfabric atomic_buffer allocation failed ";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
+    if (famThreadModel == FAM_THREAD_SERIALIZE) {
+        atomic_buffer.resize(FAM_CONTEXT_ATOMIC_BUFFERS);
 
-    uint64_t key = 0;
-    ret = fabric_register_mr(atomic_buffer, ATOMIC_BUFFER_SIZE,
-                             &key, domain, NULL, fi->fabric_attr->prov_name,
-                             true, atomic_mr);
-    if (ret < 0) {
-        message << "Fam libfabric atomic_buffer registration failed: " <<
-            fabric_strerror(ret);
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
+        uint64_t key = 0;
+        size_t bufferSize = atomic_buffer.size() * sizeof(atomic_buffer[0]);
+        ret = fabric_register_mr(&atomic_buffer[0], bufferSize,
+                                 &key, domain, NULL, fi->fabric_attr->prov_name,
+                                 true, atomic_mr);
+        if (ret < 0) {
+            message << "Fam libfabric atomic_buffer registration failed: " <<
+                fabric_strerror(ret);
+            THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
+        }
+        atomic_desc = fi_mr_desc(atomic_mr);
     }
-    atomic_desc = fi_mr_desc(atomic_mr);
 }
 
 Fam_Context::~Fam_Context() {
@@ -165,8 +163,8 @@ Fam_Context::~Fam_Context() {
         fi_close(&rxcq->fid);
         fi_close(&txCntr->fid);
         fi_close(&rxCntr->fid);
-        free(atomic_buffer);
-        fi_close(&atomic_mr->fid);
+        if (atomic_mr)
+            fi_close(&atomic_mr->fid);
     }
     pthread_rwlock_destroy(&ctxRWLock);
 }

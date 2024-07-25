@@ -72,8 +72,9 @@ class fam_buffer::Impl {
     uintptr_t regStart;
     size_t regLen;
     struct fid_mr *mr;
-    char *ep_addr;              // Valid only if remote_mr not nullptr
-    size_t ep_addr_len;
+    char *epAddr;              // Valid only if remote_mr not nullptr
+    size_t epAddrLen;
+    bool readOnly;             // Can't change registered memory
 };
 
 class Fam_Ops {
@@ -771,15 +772,14 @@ class Fam_Ops {
     /**
      * Support user buffer registration.
      */
-    virtual void register_buffer(fam_buffer::Impl *fbimpl,
-                                 bool readOnly, bool remoteAccess) {
+    virtual void register_buffer(fam_buffer::Impl *pfbimpl, bool remoteAccess) {
         if  (!remoteAccess)
             return;
         THROW_ERR_MSG(Fam_Datapath_Exception,
                       "registration for remote access not supported");
     }
 
-    virtual void deregister_buffer(fam_buffer::Impl *fbimpl) {};
+    virtual void deregister_buffer(fam_buffer::Impl *pfbimpl) {};
 
     /**
      * fam() - constructor for fam class

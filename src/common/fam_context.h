@@ -54,9 +54,7 @@ namespace openfam {
     #define CACHE_LINE_SIZE ((size_t)64)
 #endif
 
-// alignas(CACHE_LINE_SIZE) tends to make the code C17 dependent; avoid that.
-union Fam_Atomic_Types {
-    char cacheline[CACHE_LINE_SIZE];
+union alignas(CACHE_LINE_SIZE) Fam_Atomic_Types {
     int32_t i32;
     uint32_t u32;
     int64_t i64;
@@ -66,7 +64,7 @@ union Fam_Atomic_Types {
     double d;
 };
 
-#define ATOMIC_BUFFER_SIZE (sizeof(union Fam_Atomic_Types) * 3)
+#define FAM_CONTEXT_ATOMIC_BUFFERS  (3)
 
 class Fam_Context {
   public:
@@ -142,10 +140,6 @@ class Fam_Context {
     void register_heap(void *base, size_t len, struct fid_domain *domain,
                        size_t iov_limit);
 
-    union Fam_Atomic_Types *atomic_buffer = nullptr;
-    struct fid_mr *atomic_mr = nullptr;
-    void *atomic_desc;
-
   private:
     struct fid_ep *ep;
     struct fid_cq *txcq;
@@ -160,6 +154,25 @@ class Fam_Context {
     uint64_t numLastRxFailCnt;
     Fam_Thread_Model famThreadModel;
     pthread_rwlock_t ctxRWLock;
+    std::vector<union Fam_Atomic_Types> atomic_buffer;
+    struct fid_mr *atomic_mr = nullptr;
+    void *atomic_desc;
+
+    friend void fabric_atomic(uint64_t key, void *value, uint64_t offset,
+                              enum fi_op op, enum fi_datatype datatype,
+                              size_t typeSize, fi_addr_t fiAddr,
+                              Fam_Context *famCtx);
+
+    friend void fabric_fetch_atomic(uint64_t key, void *value, void *result,
+                                    uint64_t offset, enum fi_op op,
+                                    enum fi_datatype datatype, size_t typeSize,
+                                    fi_addr_t fiAddr, Fam_Context *famCtx);
+
+    friend void fabric_compare_atomic(uint64_t key, void *value, void *result,
+                                      void *compare, uint64_t offset,
+                                      enum fi_op op, enum fi_datatype datatype,
+                                      size_t typeSize, fi_addr_t fiAddr,
+                                      Fam_Context *famCtx);
 };
 
 } // namespace openfam

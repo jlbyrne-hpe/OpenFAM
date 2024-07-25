@@ -436,8 +436,8 @@ int Fam_Ops_Libfabric::put_blocking(fam_buffer_info *localBuf,
             }
             famCtx->release_lock();
             currentNbytes = pending_nbytes;
-	    currentOffset += fabric_max_msg_size;
-	    localBuf->start += fabric_max_msg_size;
+            currentOffset += fabric_max_msg_size;
+            localBuf->start += fabric_max_msg_size;
         }
         return ret;
     }
@@ -541,7 +541,7 @@ int Fam_Ops_Libfabric::put_blocking(fam_buffer_info *localBuf,
 }
 
 int Fam_Ops_Libfabric::get_blocking(fam_buffer_info *localBuf,
-				    Fam_Descriptor *descriptor,
+                                    Fam_Descriptor *descriptor,
                                     uint64_t offset, uint64_t nbytes) {
     uint64_t *memServerIds = descriptor->get_memserver_ids();
     size_t interleaveSize = descriptor->get_interleave_size();
@@ -585,8 +585,8 @@ int Fam_Ops_Libfabric::get_blocking(fam_buffer_info *localBuf,
             }
             famCtx->release_lock();
             currentNbytes = pending_nbytes;
-	    currentOffset += fabric_max_msg_size;
-	    localBuf->start += fabric_max_msg_size;
+            currentOffset += fabric_max_msg_size;
+            localBuf->start += fabric_max_msg_size;
         }
         return ret;
     }
@@ -689,7 +689,7 @@ int Fam_Ops_Libfabric::get_blocking(fam_buffer_info *localBuf,
 }
 
 int Fam_Ops_Libfabric::scatter_blocking(fam_buffer_info *localBuf,
-					Fam_Descriptor *descriptor,
+                                        Fam_Descriptor *descriptor,
                                         uint64_t nElements,
                                         uint64_t firstElement, uint64_t stride,
                                         uint64_t elementSize) {
@@ -836,7 +836,7 @@ int Fam_Ops_Libfabric::scatter_blocking(fam_buffer_info *localBuf,
 }
 
 int Fam_Ops_Libfabric::gather_blocking(fam_buffer_info *localBuf,
-				       Fam_Descriptor *descriptor,
+                                       Fam_Descriptor *descriptor,
                                        uint64_t nElements,
                                        uint64_t firstElement, uint64_t stride,
                                        uint64_t elementSize) {
@@ -984,7 +984,7 @@ int Fam_Ops_Libfabric::gather_blocking(fam_buffer_info *localBuf,
 }
 
 int Fam_Ops_Libfabric::scatter_blocking(fam_buffer_info *localBuf,
-					Fam_Descriptor *descriptor,
+                                        Fam_Descriptor *descriptor,
                                         uint64_t nElements,
                                         uint64_t *elementIndex,
                                         uint64_t elementSize) {
@@ -1132,7 +1132,7 @@ int Fam_Ops_Libfabric::scatter_blocking(fam_buffer_info *localBuf,
 }
 
 int Fam_Ops_Libfabric::gather_blocking(fam_buffer_info *localBuf,
-				       Fam_Descriptor *descriptor,
+                                       Fam_Descriptor *descriptor,
                                        uint64_t nElements,
                                        uint64_t *elementIndex,
                                        uint64_t elementSize) {
@@ -1280,7 +1280,7 @@ int Fam_Ops_Libfabric::gather_blocking(fam_buffer_info *localBuf,
 }
 
 void Fam_Ops_Libfabric::put_nonblocking(fam_buffer_info *localBuf,
-					Fam_Descriptor *descriptor,
+                                        Fam_Descriptor *descriptor,
                                         uint64_t offset, uint64_t nbytes) {
     uint64_t *memServerIds = descriptor->get_memserver_ids();
     size_t interleaveSize = descriptor->get_interleave_size();
@@ -1309,8 +1309,8 @@ void Fam_Ops_Libfabric::put_nonblocking(fam_buffer_info *localBuf,
                          (uint64_t)(base_addr_list[0]) + currentOffset,
                          (*fiAddr)[memServerIds[0]], famCtx, false);
             currentNbytes = pending_nbytes;
-	    currentOffset += fabric_max_msg_size;
-	    localBuf->start += fabric_max_msg_size;
+            currentOffset += fabric_max_msg_size;
+            localBuf->start += fabric_max_msg_size;
         }
 
         return;
@@ -1389,7 +1389,7 @@ void Fam_Ops_Libfabric::put_nonblocking(fam_buffer_info *localBuf,
 }
 
 void Fam_Ops_Libfabric::get_nonblocking(fam_buffer_info *localBuf,
-					Fam_Descriptor *descriptor,
+                                        Fam_Descriptor *descriptor,
                                         uint64_t offset, uint64_t nbytes) {
     uint64_t *memServerIds = descriptor->get_memserver_ids();
     size_t interleaveSize = descriptor->get_interleave_size();
@@ -1419,8 +1419,8 @@ void Fam_Ops_Libfabric::get_nonblocking(fam_buffer_info *localBuf,
                         (uint64_t)(base_addr_list[0]) + currentOffset,
                         (*fiAddr)[memServerIds[0]], famCtx, false);
             currentNbytes = pending_nbytes;
-	    currentOffset += fabric_max_msg_size;
-	    localBuf->start += fabric_max_msg_size;
+            currentOffset += fabric_max_msg_size;
+            localBuf->start += fabric_max_msg_size;
         }
 
         return;
@@ -2389,52 +2389,47 @@ void Fam_Ops_Libfabric::context_close(uint64_t contextId) {
     return;
 }
 
-void Fam_Ops_Libfabric::register_buffer(fam_buffer::Impl *fbimpl,
-					bool readOnly, bool remoteAccess) {
+void Fam_Ops_Libfabric::register_buffer(fam_buffer::Impl *pfbimpl,
+                                        bool remoteAccess) {
 
     uint64_t key = 0;
     struct fid_ep *ep = (remoteAccess ? ctxObj->get_ep() : nullptr);
-    int ret = fabric_register_mr((void *)fbimpl->regStart, fbimpl->regLen,
-				 &key, domain, ep, provider, !readOnly,
-				 fbimpl->mr);
+    int ret = fabric_register_mr((void *)pfbimpl->regStart, pfbimpl->regLen,
+                                 &key, domain, ep, provider, !pfbimpl->readOnly,
+                                 pfbimpl->mr);
     if (ret < 0) {
-        fbimpl->mr = nullptr;
-	ostringstream message;
-	message << "fabric_register() failed: " << fabric_strerror(ret);
-	THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
+        pfbimpl->mr = nullptr;
+        ostringstream message;
+        message << "fabric_register() failed: " << fabric_strerror(ret);
+        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
     }
-    /*
-    printf("%s:fbimpl %p %d %d 0x%lx 0x%lx %p 0x%lx\n", __func__, fbimpl,
-	   readOnly, remoteAccess,
-	   fbimpl->regStart, fbimpl->regLen, fbimpl->desc, fbimpl->rkey);
-    */
     if (!remoteAccess)
         return;
 
-    fbimpl->ep_addr_len = 0;
-    ret = fabric_getname_len(ep, &fbimpl->ep_addr_len);
+    pfbimpl->epAddrLen = 0;
+    ret = fabric_getname_len(ep, &pfbimpl->epAddrLen);
     if (ret != -FI_ETOOSMALL) {
-	ostringstream message;
-	message << "fabric_getname_len() failed: " << fabric_strerror(ret);
-	THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
+        ostringstream message;
+        message << "fabric_getname_len() failed: " << fabric_strerror(ret);
+        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
     }
-    fbimpl->ep_addr = new char[fbimpl->ep_addr_len];
-    ret = fabric_getname(ep, fbimpl->ep_addr, &fbimpl->ep_addr_len);
+    pfbimpl->epAddr = new char[pfbimpl->epAddrLen];
+    ret = fabric_getname(ep, pfbimpl->epAddr, &pfbimpl->epAddrLen);
     if (ret < 0) {
-	ostringstream message;
-	message << "fabric_getname() failed: " << fabric_strerror(ret);
-	THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
+        ostringstream message;
+        message << "fabric_getname() failed: " << fabric_strerror(ret);
+        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
     }
 }
 
-  void Fam_Ops_Libfabric::deregister_buffer(fam_buffer::Impl *fbimpl) {
+void Fam_Ops_Libfabric::deregister_buffer(fam_buffer::Impl *pfbimpl) {
 
-    //printf("%s:fbimpl %p\n", __func__, fbimpl);
-    if (fbimpl->mr)
-        fabric_deregister_mr(fbimpl->mr);
-    fbimpl->mr = nullptr;
-    if (fbimpl->ep_addr)
-      delete[] fbimpl->ep_addr;
-    fbimpl->ep_addr = nullptr;
+    //printf("%s:pfbimpl %p\n", __func__, pfbimpl);
+    if (pfbimpl->mr)
+        fabric_deregister_mr(pfbimpl->mr);
+    pfbimpl->mr = nullptr;
+    delete[] pfbimpl->epAddr;
+    pfbimpl->epAddr = nullptr;
+    pfbimpl->epAddrLen = 0;
 }
 } // namespace openfam
