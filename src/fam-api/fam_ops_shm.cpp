@@ -122,8 +122,10 @@ Fam_Context *Fam_Ops_SHM::get_context(Fam_Descriptor *descriptor) {
     }
 }
 
-int Fam_Ops_SHM::put_blocking(void *local, Fam_Descriptor *descriptor,
+int Fam_Ops_SHM::put_blocking(fam_local_buffer_info *localBuf,
+			      Fam_Descriptor *descriptor,
                               uint64_t offset, uint64_t nbytes) {
+    void *local = (void *)localBuf->start;
     uint64_t *base_addr_list = descriptor->get_base_address_list();
     uint64_t size = descriptor->get_size();
     uint64_t *keys = descriptor->get_keys();
@@ -154,8 +156,10 @@ int Fam_Ops_SHM::put_blocking(void *local, Fam_Descriptor *descriptor,
     return FAM_SUCCESS;
 }
 
-int Fam_Ops_SHM::get_blocking(void *local, Fam_Descriptor *descriptor,
+int Fam_Ops_SHM::get_blocking(fam_local_buffer_info *localBuf,
+			      Fam_Descriptor *descriptor,
                               uint64_t offset, uint64_t nbytes) {
+    void *local = (void *)localBuf->start;
     uint64_t *base_addr_list = descriptor->get_base_address_list();
     uint64_t size = descriptor->get_size();
     uint64_t *keys = descriptor->get_keys();
@@ -186,9 +190,11 @@ int Fam_Ops_SHM::get_blocking(void *local, Fam_Descriptor *descriptor,
     return FAM_SUCCESS;
 }
 
-int Fam_Ops_SHM::gather_blocking(void *local, Fam_Descriptor *descriptor,
+int Fam_Ops_SHM::gather_blocking(fam_local_buffer_info *localBuf,
+                                 Fam_Descriptor *descriptor,
                                  uint64_t nElements, uint64_t firstElement,
                                  uint64_t stride, uint64_t elementSize) {
+    void *local = (void *)localBuf->start;
     uint64_t *base_addr_list = descriptor->get_base_address_list();
     uint64_t size = descriptor->get_size();
     uint64_t *keys = descriptor->get_keys();
@@ -228,9 +234,11 @@ int Fam_Ops_SHM::gather_blocking(void *local, Fam_Descriptor *descriptor,
     return FAM_SUCCESS;
 }
 
-int Fam_Ops_SHM::gather_blocking(void *local, Fam_Descriptor *descriptor,
+int Fam_Ops_SHM::gather_blocking(fam_local_buffer_info *localBuf,
+                                 Fam_Descriptor *descriptor,
                                  uint64_t nElements, uint64_t *elementIndex,
                                  uint64_t elementSize) {
+    void *local = (void *)localBuf->start;
     uint64_t *base_addr_list = descriptor->get_base_address_list();
     uint64_t size = descriptor->get_size();
     uint64_t *keys = descriptor->get_keys();
@@ -273,9 +281,11 @@ int Fam_Ops_SHM::gather_blocking(void *local, Fam_Descriptor *descriptor,
     return FAM_SUCCESS;
 }
 
-int Fam_Ops_SHM::scatter_blocking(void *local, Fam_Descriptor *descriptor,
+int Fam_Ops_SHM::scatter_blocking(fam_local_buffer_info *localBuf,
+                                  Fam_Descriptor *descriptor,
                                   uint64_t nElements, uint64_t firstElement,
                                   uint64_t stride, uint64_t elementSize) {
+    void *local = (void *)localBuf->start;
     uint64_t *base_addr_list = descriptor->get_base_address_list();
     uint64_t size = descriptor->get_size();
     uint64_t *keys = descriptor->get_keys();
@@ -315,9 +325,11 @@ int Fam_Ops_SHM::scatter_blocking(void *local, Fam_Descriptor *descriptor,
     return FAM_SUCCESS;
 }
 
-int Fam_Ops_SHM::scatter_blocking(void *local, Fam_Descriptor *descriptor,
+int Fam_Ops_SHM::scatter_blocking(fam_local_buffer_info *localBuf,
+                                  Fam_Descriptor *descriptor,
                                   uint64_t nElements, uint64_t *elementIndex,
                                   uint64_t elementSize) {
+    void *local = (void *)localBuf->start;
     uint64_t *base_addr_list = descriptor->get_base_address_list();
     uint64_t size = descriptor->get_size();
     uint64_t *keys = descriptor->get_keys();
@@ -360,8 +372,10 @@ int Fam_Ops_SHM::scatter_blocking(void *local, Fam_Descriptor *descriptor,
     return FAM_SUCCESS;
 }
 
-void Fam_Ops_SHM::put_nonblocking(void *local, Fam_Descriptor *descriptor,
+void Fam_Ops_SHM::put_nonblocking(fam_local_buffer_info *localBuf,
+                                  Fam_Descriptor *descriptor,
                                   uint64_t offset, uint64_t nbytes) {
+    void *local = (void *)localBuf->start;
     uint64_t *base_addr_list = descriptor->get_base_address_list();
     uint64_t itemSize = descriptor->get_size();
     uint64_t *keys = descriptor->get_keys();
@@ -384,8 +398,10 @@ void Fam_Ops_SHM::put_nonblocking(void *local, Fam_Descriptor *descriptor,
     return;
 }
 
-void Fam_Ops_SHM::get_nonblocking(void *local, Fam_Descriptor *descriptor,
+void Fam_Ops_SHM::get_nonblocking(fam_local_buffer_info *localBuf,
+                                  Fam_Descriptor *descriptor,
                                   uint64_t offset, uint64_t nbytes) {
+    void *local = (void *)localBuf->start;
     uint64_t *base_addr_list = descriptor->get_base_address_list();
     uint64_t itemSize = descriptor->get_size();
     uint64_t *keys = descriptor->get_keys();
@@ -409,9 +425,11 @@ void Fam_Ops_SHM::get_nonblocking(void *local, Fam_Descriptor *descriptor,
     return;
 }
 
-void Fam_Ops_SHM::gather_nonblocking(void *local, Fam_Descriptor *descriptor,
+void Fam_Ops_SHM::gather_nonblocking(fam_local_buffer_info *localBuf,
+                                     Fam_Descriptor *descriptor,
                                      uint64_t nElements, uint64_t firstElement,
                                      uint64_t stride, uint64_t elementSize) {
+    void *local = (void *)localBuf->start;
     uint64_t *base_addr_list = descriptor->get_base_address_list();
     uint64_t itemSize = descriptor->get_size();
     uint64_t *keys = descriptor->get_keys();
@@ -444,9 +462,11 @@ void Fam_Ops_SHM::gather_nonblocking(void *local, Fam_Descriptor *descriptor,
     return;
 }
 
-void Fam_Ops_SHM::gather_nonblocking(void *local, Fam_Descriptor *descriptor,
+void Fam_Ops_SHM::gather_nonblocking(fam_local_buffer_info *localBuf,
+                                     Fam_Descriptor *descriptor,
                                      uint64_t nElements, uint64_t *elementIndex,
                                      uint64_t elementSize) {
+    void *local = (void *)localBuf->start;
     uint64_t *base_addr_list = descriptor->get_base_address_list();
     uint64_t itemSize = descriptor->get_size();
     uint64_t *keys = descriptor->get_keys();
@@ -478,9 +498,11 @@ void Fam_Ops_SHM::gather_nonblocking(void *local, Fam_Descriptor *descriptor,
     return;
 }
 
-void Fam_Ops_SHM::scatter_nonblocking(void *local, Fam_Descriptor *descriptor,
+void Fam_Ops_SHM::scatter_nonblocking(fam_local_buffer_info *localBuf,
+                                      Fam_Descriptor *descriptor,
                                       uint64_t nElements, uint64_t firstElement,
                                       uint64_t stride, uint64_t elementSize) {
+    void *local = (void *)localBuf->start;
     uint64_t *base_addr_list = descriptor->get_base_address_list();
     uint64_t itemSize = descriptor->get_size();
     uint64_t *keys = descriptor->get_keys();
@@ -512,10 +534,12 @@ void Fam_Ops_SHM::scatter_nonblocking(void *local, Fam_Descriptor *descriptor,
 
     return;
 }
-void Fam_Ops_SHM::scatter_nonblocking(void *local, Fam_Descriptor *descriptor,
+void Fam_Ops_SHM::scatter_nonblocking(fam_local_buffer_info *localBuf,
+                                      Fam_Descriptor *descriptor,
                                       uint64_t nElements,
                                       uint64_t *elementIndex,
                                       uint64_t elementSize) {
+    void *local = (void *)localBuf->start;
     uint64_t *base_addr_list = descriptor->get_base_address_list();
     uint64_t itemSize = descriptor->get_size();
     uint64_t *keys = descriptor->get_keys();

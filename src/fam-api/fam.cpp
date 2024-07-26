@@ -102,6 +102,19 @@ namespace openfam {
 /*
  * Internal implementation of fam
  */
+
+static void fill_buffer_info(fam_local_buffer_info *localBuf,
+                             fam_local_buffer *local, size_t localOffset,
+                             size_t len, bool get) {
+    if (local == NULL || len == 0 || (get && local->get_putOnly()))
+        THROW_ERR_MSG(Fam_InvalidOption_Exception, "Invalid Options");
+
+    local->check_offset_and_len(localOffset, len); // throws
+    localBuf->start = local->get_start() + localOffset;
+    localBuf->len = len;
+    localBuf->desc = local->get_desc();
+}
+
 class fam::Impl_ {
   public:
     Impl_() {
@@ -133,10 +146,7 @@ class fam::Impl_ {
             famOps = new Fam_Ops_Libfabric((Fam_Ops_Libfabric *)pimpl->famOps);
             ctxId = famOps->get_context_id();
             pimpl->famOps->context_open(ctxId, famOps);
-            if (((pimpl->famOptions).local_buf_size != 0) &&
-                    ((pimpl->famOptions).local_buf_addr != NULL))
-                famOps->register_heap((pimpl->famOptions).local_buf_addr,
-                                  (pimpl->famOptions).local_buf_size);
+            registeredHeap = pimpl->registeredHeap;
         }
         famAllocator = pimpl->famAllocator;
         famRuntime = pimpl->famRuntime;
@@ -158,6 +168,8 @@ class fam::Impl_ {
                 delete famAllocator;
             if (famRuntime)
                 delete famRuntime;
+            if (registeredHeap)
+                delete registeredHeap;
         }
     }
 
@@ -208,51 +220,63 @@ class fam::Impl_ {
     void fam_stat(Fam_Descriptor *descriptor, Fam_Stat *famInfo);
     void fam_stat(Fam_Region_Descriptor *descriptor, Fam_Stat *famInfo);
 
-    void fam_get_blocking(void *local, Fam_Descriptor *descriptor,
+    void fam_get_blocking(fam_local_buffer_info *localBuf,
+                          Fam_Descriptor *descriptor,
                           uint64_t offset, uint64_t nbytes);
 
-    void fam_get_nonblocking(void *local, Fam_Descriptor *descriptor,
+    void fam_get_nonblocking(fam_local_buffer_info *localBuf,
+                             Fam_Descriptor *descriptor,
                              uint64_t offset, uint64_t nbytes);
 
-    void fam_put_blocking(void *local, Fam_Descriptor *descriptor,
+    void fam_put_blocking(fam_local_buffer_info *localBuf,
+                          Fam_Descriptor *descriptor,
                           uint64_t offset, uint64_t nbytes);
 
-    void fam_put_nonblocking(void *local, Fam_Descriptor *descriptor,
+    void fam_put_nonblocking(fam_local_buffer_info *localBuf,
+                             Fam_Descriptor *descriptor,
                              uint64_t offset, uint64_t nbytes);
 
     void *fam_map(Fam_Descriptor *descriptor);
 
     void fam_unmap(void *local, Fam_Descriptor *descriptor);
 
-    void fam_gather_blocking(void *local, Fam_Descriptor *descriptor,
+    void fam_gather_blocking(fam_local_buffer_info *localBuf,
+                             Fam_Descriptor *descriptor,
                              uint64_t nElements, uint64_t firstElement,
                              uint64_t stride, uint64_t elementSize);
 
-    void fam_gather_blocking(void *local, Fam_Descriptor *descriptor,
+    void fam_gather_blocking(fam_local_buffer_info *localBuf,
+                             Fam_Descriptor *descriptor,
                              uint64_t nElements, uint64_t *elementIndex,
                              uint64_t elementSize);
 
-    void fam_gather_nonblocking(void *local, Fam_Descriptor *descriptor,
+    void fam_gather_nonblocking(fam_local_buffer_info *localBuf,
+                                Fam_Descriptor *descriptor,
                                 uint64_t nElements, uint64_t firstElement,
                                 uint64_t stride, uint64_t elementSize);
 
-    void fam_gather_nonblocking(void *local, Fam_Descriptor *descriptor,
+    void fam_gather_nonblocking(fam_local_buffer_info *localBuf,
+                                Fam_Descriptor *descriptor,
                                 uint64_t nElements, uint64_t *elementIndex,
                                 uint64_t elementSize);
 
-    void fam_scatter_blocking(void *local, Fam_Descriptor *descriptor,
+    void fam_scatter_blocking(fam_local_buffer_info *localBuf,
+                              Fam_Descriptor *descriptor,
                               uint64_t nElements, uint64_t firstElement,
                               uint64_t stride, uint64_t elementSize);
 
-    void fam_scatter_blocking(void *local, Fam_Descriptor *descriptor,
+    void fam_scatter_blocking(fam_local_buffer_info *localBuf,
+                              Fam_Descriptor *descriptor,
                               uint64_t nElements, uint64_t *elementIndex,
                               uint64_t elementSize);
 
-    void fam_scatter_nonblocking(void *local, Fam_Descriptor *descriptor,
+    void fam_scatter_nonblocking(fam_local_buffer_info *localBuf,
+                                 Fam_Descriptor *descriptor,
                                  uint64_t nElements, uint64_t firstElement,
                                  uint64_t stride, uint64_t elementSize);
 
-    void fam_scatter_nonblocking(void *local, Fam_Descriptor *descriptor,
+    void fam_scatter_nonblocking(fam_local_buffer_info *localBuf,
+                                 Fam_Descriptor *descriptor,
                                  uint64_t nElements, uint64_t *elementIndex,
                                  uint64_t elementSize);
 
@@ -436,6 +460,24 @@ class fam::Impl_ {
 #ifdef FAM_PROFILE
     void fam_reset_profile();
 #endif
+
+    fam_local_buffer *fam_local_buffer_register(
+                                        void *start, size_t len,
+                                        bool putOnly, bool remoteAccess);
+
+    void fill_buffer_info(fam_local_buffer_info *localBuf, void *local,
+                          size_t len) {
+
+        localBuf->start = (uintptr_t)local;
+        localBuf->len = len;
+
+        if (registeredHeap) {
+            registeredHeap->check_buffer(local, len);
+            localBuf->desc = registeredHeap->get_desc();
+        } else
+            localBuf->desc = nullptr;
+    }
+
   private:
     uid_t uid;
     gid_t gid;
@@ -451,6 +493,7 @@ class fam::Impl_ {
     std::list<fam_context *> *ctxList;
     uint64_t ctxId;
     bool enableResourceRelease;
+    fam_local_buffer *registeredHeap = nullptr;
 
 #ifdef FAM_PROFILE
     Fam_Counter_St profileData[fam_counter_max][FAM_CNTR_TYPE_MAX];
@@ -657,6 +700,18 @@ void fam::Impl_::fam_reset_profile() {
 }
 #endif
 
+fam_local_buffer *fam::Impl_::fam_local_buffer_register(
+                                        void *start, size_t len,
+                                        bool putOnly, bool remoteAccess)
+{
+    if (start == NULL || len == 0)
+        THROW_ERR_MSG(Fam_InvalidOption_Exception, "Invalid Options");
+
+    auto pfbimpl = new fam_local_buffer::Impl(famOps, start, len, putOnly,
+                                              remoteAccess);
+    return new fam_local_buffer(pfbimpl);
+}
+
 /**
  * fam() - constructor for fam class
  */
@@ -800,7 +855,11 @@ void fam::Impl_::fam_initialize(const char *grpName, Fam_Options *options) {
         else {
             if(famOptions.local_buf_size != 0 &&
                     famOptions.local_buf_addr != NULL) {
-                famOps->register_heap(famOptions.local_buf_addr , famOptions.local_buf_size);
+                // heap is only registered for local access.
+                registeredHeap =
+                    fam_local_buffer_register(famOptions.local_buf_addr,
+                                              famOptions.local_buf_size,
+                                              false, false);
             }
         }
     }
@@ -1771,7 +1830,8 @@ void fam::Impl_::fam_unmap(void *local, Fam_Descriptor *descriptor) {
  * @throws : Fam_Permission_Exception if the given key has incorrect permissions
  * @throws : Fam_Datapath_Exception if libfabric read fails
  */
-void fam::Impl_::fam_get_blocking(void *local, Fam_Descriptor *descriptor,
+void fam::Impl_::fam_get_blocking(fam_local_buffer_info *localBuf,
+                                  Fam_Descriptor *descriptor,
                                   uint64_t offset, uint64_t nbytes) {
 
     int ret = 0;
@@ -1779,7 +1839,7 @@ void fam::Impl_::fam_get_blocking(void *local, Fam_Descriptor *descriptor,
 
     FAM_CNTR_INC_API(fam_get_blocking);
     FAM_PROFILE_START_ALLOCATOR(fam_get_blocking);
-    if ((local == NULL) || (descriptor == NULL) || (nbytes == 0)) {
+    if ((localBuf == NULL) || (descriptor == NULL) || (nbytes == 0)) {
         THROW_ERR_MSG(Fam_InvalidOption_Exception, "Invalid Options");
     }
     ret = validate_item(descriptor);
@@ -1797,7 +1857,7 @@ void fam::Impl_::fam_get_blocking(void *local, Fam_Descriptor *descriptor,
     FAM_PROFILE_START_OPS(fam_get_blocking);
     if (ret == 0) {
         // Read data from FAM region with this key
-        ret = famOps->get_blocking(local, descriptor, offset, nbytes);
+        ret = famOps->get_blocking(localBuf, descriptor, offset, nbytes);
     }
     FAM_PROFILE_END_OPS(fam_get_blocking);
 }
@@ -1812,12 +1872,13 @@ void fam::Impl_::fam_get_blocking(void *local, Fam_Descriptor *descriptor,
  * where memory should be copied
  * @param nbytes - number of bytes to be copied from global to local memory
  */
-void fam::Impl_::fam_get_nonblocking(void *local, Fam_Descriptor *descriptor,
+void fam::Impl_::fam_get_nonblocking(fam_local_buffer_info *localBuf,
+                                     Fam_Descriptor *descriptor,
                                      uint64_t offset, uint64_t nbytes) {
 
     FAM_CNTR_INC_API(fam_get_nonblocking);
     FAM_PROFILE_START_ALLOCATOR(fam_get_nonblocking);
-    if ((local == NULL) || (descriptor == NULL) || (nbytes == 0)) {
+    if ((localBuf == NULL) || (descriptor == NULL) || (nbytes == 0)) {
         THROW_ERR_MSG(Fam_InvalidOption_Exception, "Invalid Options");
     }
     int ret = validate_item(descriptor);
@@ -1834,7 +1895,7 @@ void fam::Impl_::fam_get_nonblocking(void *local, Fam_Descriptor *descriptor,
     FAM_PROFILE_START_OPS(fam_get_nonblocking);
     if (ret == 0) {
         // Read data from FAM region with this key
-        famOps->get_nonblocking(local, descriptor, offset, nbytes);
+        famOps->get_nonblocking(localBuf, descriptor, offset, nbytes);
     }
     FAM_PROFILE_END_OPS(fam_get_nonblocking);
     return;
@@ -1854,7 +1915,8 @@ void fam::Impl_::fam_get_nonblocking(void *local, Fam_Descriptor *descriptor,
  * @throws : Fam_Permission_Exception if the given key has incorrect permissions
  * @throws : Fam_Datapath_Exception if libfabric write fails.
  */
-void fam::Impl_::fam_put_blocking(void *local, Fam_Descriptor *descriptor,
+void fam::Impl_::fam_put_blocking(fam_local_buffer_info *localBuf,
+                                  Fam_Descriptor *descriptor,
                                   uint64_t offset, uint64_t nbytes) {
 
     int ret = 0;
@@ -1862,7 +1924,7 @@ void fam::Impl_::fam_put_blocking(void *local, Fam_Descriptor *descriptor,
 
     FAM_CNTR_INC_API(fam_put_blocking);
     FAM_PROFILE_START_ALLOCATOR(fam_put_blocking);
-    if ((local == NULL) || (descriptor == NULL) || (nbytes == 0)) {
+    if ((localBuf == NULL) || (descriptor == NULL) || (nbytes == 0)) {
         THROW_ERR_MSG(Fam_InvalidOption_Exception, "Invalid Options");
     }
 
@@ -1880,7 +1942,7 @@ void fam::Impl_::fam_put_blocking(void *local, Fam_Descriptor *descriptor,
     FAM_PROFILE_END_ALLOCATOR(fam_put_blocking);
     FAM_PROFILE_START_OPS(fam_put_blocking);
     if (ret == 0) {
-        ret = famOps->put_blocking(local, descriptor, offset, nbytes);
+        ret = famOps->put_blocking(localBuf, descriptor, offset, nbytes);
     }
     FAM_PROFILE_END_OPS(fam_put_blocking);
 }
@@ -1895,11 +1957,12 @@ void fam::Impl_::fam_put_blocking(void *local, Fam_Descriptor *descriptor,
  * where data should be copied
  * @param nbytes - number of bytes to be copied from local to FAM
  */
-void fam::Impl_::fam_put_nonblocking(void *local, Fam_Descriptor *descriptor,
+void fam::Impl_::fam_put_nonblocking(fam_local_buffer_info *localBuf,
+                                     Fam_Descriptor *descriptor,
                                      uint64_t offset, uint64_t nbytes) {
     FAM_CNTR_INC_API(fam_put_nonblocking);
     FAM_PROFILE_START_ALLOCATOR(fam_put_nonblocking);
-    if ((local == NULL) || (descriptor == NULL) || (nbytes == 0)) {
+    if ((localBuf == NULL) || (descriptor == NULL) || (nbytes == 0)) {
         THROW_ERR_MSG(Fam_InvalidOption_Exception, "Invalid Options");
     }
 
@@ -1917,7 +1980,7 @@ void fam::Impl_::fam_put_nonblocking(void *local, Fam_Descriptor *descriptor,
     FAM_PROFILE_END_ALLOCATOR(fam_put_nonblocking);
     FAM_PROFILE_START_OPS(fam_put_nonblocking);
     if (ret == 0) {
-        famOps->put_nonblocking(local, descriptor, offset, nbytes);
+        famOps->put_nonblocking(localBuf, descriptor, offset, nbytes);
     }
     FAM_PROFILE_END_OPS(fam_put_nonblocking);
     return;
@@ -1944,12 +2007,13 @@ void fam::Impl_::fam_put_nonblocking(void *local, Fam_Descriptor *descriptor,
  * negative number in case of exception
  * @see #fam_scatter_strided
  */
-void fam::Impl_::fam_gather_blocking(void *local, Fam_Descriptor *descriptor,
+void fam::Impl_::fam_gather_blocking(fam_local_buffer_info *localBuf,
+                                     Fam_Descriptor *descriptor,
                                      uint64_t nElements, uint64_t firstElement,
                                      uint64_t stride, uint64_t elementSize) {
     FAM_CNTR_INC_API(fam_gather_blocking);
     FAM_PROFILE_START_ALLOCATOR(fam_gather_blocking);
-    if ((local == NULL) || (descriptor == NULL) || (nElements == 0)) {
+    if ((localBuf == NULL) || (descriptor == NULL) || (nElements == 0)) {
         THROW_ERR_MSG(Fam_InvalidOption_Exception, "Invalid Options");
     }
 
@@ -1965,7 +2029,7 @@ void fam::Impl_::fam_gather_blocking(void *local, Fam_Descriptor *descriptor,
     FAM_PROFILE_END_ALLOCATOR(fam_gather_blocking);
     FAM_PROFILE_START_OPS(fam_gather_blocking);
     if (ret == 0) {
-        ret = famOps->gather_blocking(local, descriptor, nElements,
+        ret = famOps->gather_blocking(localBuf, descriptor, nElements,
                                       firstElement, stride, elementSize);
     }
     FAM_PROFILE_END_OPS(fam_gather_blocking);
@@ -1987,12 +2051,13 @@ void fam::Impl_::fam_gather_blocking(void *local, Fam_Descriptor *descriptor,
  * negative number in case errors
  * @see #fam_scatter_indexed
  */
-void fam::Impl_::fam_gather_blocking(void *local, Fam_Descriptor *descriptor,
+void fam::Impl_::fam_gather_blocking(fam_local_buffer_info *localBuf,
+                                     Fam_Descriptor *descriptor,
                                      uint64_t nElements, uint64_t *elementIndex,
                                      uint64_t elementSize) {
     FAM_CNTR_INC_API(fam_gather_blocking);
     FAM_PROFILE_START_ALLOCATOR(fam_gather_blocking);
-    if ((local == NULL) || (descriptor == NULL) || (nElements == 0)) {
+    if ((localBuf == NULL) || (descriptor == NULL) || (nElements == 0)) {
         THROW_ERR_MSG(Fam_InvalidOption_Exception, "Invalid Options");
     }
 
@@ -2011,7 +2076,7 @@ void fam::Impl_::fam_gather_blocking(void *local, Fam_Descriptor *descriptor,
     FAM_PROFILE_END_ALLOCATOR(fam_gather_blocking);
     FAM_PROFILE_START_OPS(fam_gather_blocking);
     if (ret == 0) {
-        ret = famOps->gather_blocking(local, descriptor, nElements,
+        ret = famOps->gather_blocking(localBuf, descriptor, nElements,
                                       elementIndex, elementSize);
     }
     FAM_PROFILE_END_OPS(fam_gather_blocking);
@@ -2032,13 +2097,14 @@ void fam::Impl_::fam_gather_blocking(void *local, Fam_Descriptor *descriptor,
  * @param elementSize - size of the element in bytes
  * @see #fam_scatter_strided
  */
-void fam::Impl_::fam_gather_nonblocking(void *local, Fam_Descriptor *descriptor,
+void fam::Impl_::fam_gather_nonblocking(fam_local_buffer_info *localBuf,
+                                        Fam_Descriptor *descriptor,
                                         uint64_t nElements,
                                         uint64_t firstElement, uint64_t stride,
                                         uint64_t elementSize) {
     FAM_CNTR_INC_API(fam_gather_nonblocking);
     FAM_PROFILE_START_ALLOCATOR(fam_gather_nonblocking);
-    if ((local == NULL) || (descriptor == NULL) || (nElements == 0)) {
+    if ((localBuf == NULL) || (descriptor == NULL) || (nElements == 0)) {
         THROW_ERR_MSG(Fam_InvalidOption_Exception, "Invalid Options");
     }
 
@@ -2056,8 +2122,8 @@ void fam::Impl_::fam_gather_nonblocking(void *local, Fam_Descriptor *descriptor,
     FAM_PROFILE_END_ALLOCATOR(fam_gather_nonblocking);
     FAM_PROFILE_START_OPS(fam_gather_nonblocking);
     if (ret == 0) {
-        famOps->gather_nonblocking(local, descriptor, nElements, firstElement,
-                                   stride, elementSize);
+        famOps->gather_nonblocking(localBuf, descriptor, nElements,
+                                   firstElement, stride, elementSize);
     }
     FAM_PROFILE_END_OPS(fam_gather_nonblocking);
     return;
@@ -2077,13 +2143,14 @@ void fam::Impl_::fam_gather_nonblocking(void *local, Fam_Descriptor *descriptor,
  * @param elementSize - size of each element in bytes
  * @see #fam_scatter_indexed
  */
-void fam::Impl_::fam_gather_nonblocking(void *local, Fam_Descriptor *descriptor,
+void fam::Impl_::fam_gather_nonblocking(fam_local_buffer_info *localBuf,
+                                        Fam_Descriptor *descriptor,
                                         uint64_t nElements,
                                         uint64_t *elementIndex,
                                         uint64_t elementSize) {
     FAM_CNTR_INC_API(fam_gather_nonblocking);
     FAM_PROFILE_START_ALLOCATOR(fam_gather_nonblocking);
-    if ((local == NULL) || (descriptor == NULL) || (nElements == 0)) {
+    if ((localBuf == NULL) || (descriptor == NULL) || (nElements == 0)) {
         THROW_ERR_MSG(Fam_InvalidOption_Exception, "Invalid Options");
     }
 
@@ -2104,8 +2171,8 @@ void fam::Impl_::fam_gather_nonblocking(void *local, Fam_Descriptor *descriptor,
     FAM_PROFILE_END_ALLOCATOR(fam_gather_nonblocking);
     FAM_PROFILE_START_OPS(fam_gather_nonblocking);
     if (ret == 0) {
-        famOps->gather_nonblocking(local, descriptor, nElements, elementIndex,
-                                   elementSize);
+        famOps->gather_nonblocking(localBuf, descriptor, nElements,
+                                   elementIndex, elementSize);
     }
     FAM_PROFILE_END_OPS(fam_gather_nonblocking);
     return;
@@ -2128,13 +2195,14 @@ void fam::Impl_::fam_gather_nonblocking(void *local, Fam_Descriptor *descriptor,
  * negative number in case errors
  * @see #fam_gather_strided
  */
-void fam::Impl_::fam_scatter_blocking(void *local, Fam_Descriptor *descriptor,
+void fam::Impl_::fam_scatter_blocking(fam_local_buffer_info *localBuf,
+                                      Fam_Descriptor *descriptor,
                                       uint64_t nElements, uint64_t firstElement,
                                       uint64_t stride, uint64_t elementSize) {
 
     FAM_CNTR_INC_API(fam_scatter_blocking);
     FAM_PROFILE_START_ALLOCATOR(fam_scatter_blocking);
-    if ((local == NULL) || (descriptor == NULL) || (nElements == 0)) {
+    if ((localBuf == NULL) || (descriptor == NULL) || (nElements == 0)) {
         THROW_ERR_MSG(Fam_InvalidOption_Exception, "Invalid Options");
     }
 
@@ -2152,7 +2220,7 @@ void fam::Impl_::fam_scatter_blocking(void *local, Fam_Descriptor *descriptor,
     FAM_PROFILE_END_ALLOCATOR(fam_scatter_blocking);
     FAM_PROFILE_START_OPS(fam_scatter_blocking);
     if (ret == 0) {
-        ret = famOps->scatter_blocking(local, descriptor, nElements,
+        ret = famOps->scatter_blocking(localBuf, descriptor, nElements,
                                        firstElement, stride, elementSize);
     }
     FAM_PROFILE_END_OPS(fam_scatter_blocking);
@@ -2173,14 +2241,15 @@ void fam::Impl_::fam_scatter_blocking(void *local, Fam_Descriptor *descriptor,
  * negative number in case errors
  * @see #fam_gather_indexed
  */
-void fam::Impl_::fam_scatter_blocking(void *local, Fam_Descriptor *descriptor,
+void fam::Impl_::fam_scatter_blocking(fam_local_buffer_info *localBuf,
+                                      Fam_Descriptor *descriptor,
                                       uint64_t nElements,
                                       uint64_t *elementIndex,
                                       uint64_t elementSize) {
 
     FAM_CNTR_INC_API(fam_scatter_blocking);
     FAM_PROFILE_START_ALLOCATOR(fam_scatter_blocking);
-    if ((local == NULL) || (descriptor == NULL) || (nElements == 0)) {
+    if ((localBuf == NULL) || (descriptor == NULL) || (nElements == 0)) {
         THROW_ERR_MSG(Fam_InvalidOption_Exception, "Invalid Options");
     }
 
@@ -2200,7 +2269,7 @@ void fam::Impl_::fam_scatter_blocking(void *local, Fam_Descriptor *descriptor,
     FAM_PROFILE_END_ALLOCATOR(fam_scatter_blocking);
     FAM_PROFILE_START_OPS(fam_scatter_blocking);
     if (ret == 0) {
-        ret = famOps->scatter_blocking(local, descriptor, nElements,
+        ret = famOps->scatter_blocking(localBuf, descriptor, nElements,
                                        elementIndex, elementSize);
     }
     FAM_PROFILE_END_OPS(fam_scatter_blocking);
@@ -2223,14 +2292,14 @@ void fam::Impl_::fam_scatter_blocking(void *local, Fam_Descriptor *descriptor,
  * negative number in case errors
  * @see #fam_gather_strided
  */
-void fam::Impl_::fam_scatter_nonblocking(void *local,
+void fam::Impl_::fam_scatter_nonblocking(fam_local_buffer_info *localBuf,
                                          Fam_Descriptor *descriptor,
                                          uint64_t nElements,
                                          uint64_t firstElement, uint64_t stride,
                                          uint64_t elementSize) {
     FAM_CNTR_INC_API(fam_scatter_nonblocking);
     FAM_PROFILE_START_ALLOCATOR(fam_scatter_nonblocking);
-    if ((local == NULL) || (descriptor == NULL) || (nElements == 0)) {
+    if ((localBuf == NULL) || (descriptor == NULL) || (nElements == 0)) {
         THROW_ERR_MSG(Fam_InvalidOption_Exception, "Invalid Options");
     }
 
@@ -2246,8 +2315,8 @@ void fam::Impl_::fam_scatter_nonblocking(void *local,
     FAM_PROFILE_END_ALLOCATOR(fam_scatter_nonblocking);
     FAM_PROFILE_START_OPS(fam_scatter_nonblocking);
     if (ret == 0) {
-        famOps->scatter_nonblocking(local, descriptor, nElements, firstElement,
-                                    stride, elementSize);
+        famOps->scatter_nonblocking(localBuf, descriptor, nElements,
+                                    firstElement, stride, elementSize);
     }
     FAM_PROFILE_END_OPS(fam_scatter_nonblocking);
     return;
@@ -2268,14 +2337,14 @@ void fam::Impl_::fam_scatter_nonblocking(void *local,
  * negative number in case errors
  * @see #fam_gather_indexed
  */
-void fam::Impl_::fam_scatter_nonblocking(void *local,
+void fam::Impl_::fam_scatter_nonblocking(fam_local_buffer_info *localBuf,
                                          Fam_Descriptor *descriptor,
                                          uint64_t nElements,
                                          uint64_t *elementIndex,
                                          uint64_t elementSize) {
     FAM_CNTR_INC_API(fam_scatter_nonblocking);
     FAM_PROFILE_START_ALLOCATOR(fam_scatter_nonblocking);
-    if ((local == NULL) || (descriptor == NULL) || (nElements == 0)) {
+    if ((localBuf == NULL) || (descriptor == NULL) || (nElements == 0)) {
         THROW_ERR_MSG(Fam_InvalidOption_Exception, "Invalid Options");
     }
 
@@ -2294,8 +2363,8 @@ void fam::Impl_::fam_scatter_nonblocking(void *local,
     FAM_PROFILE_END_ALLOCATOR(fam_scatter_nonblocking);
     FAM_PROFILE_START_OPS(fam_scatter_nonblocking);
     if (ret == 0) {
-        famOps->scatter_nonblocking(local, descriptor, nElements, elementIndex,
-                                    elementSize);
+        famOps->scatter_nonblocking(localBuf, descriptor, nElements,
+                                    elementIndex, elementSize);
     }
     FAM_PROFILE_END_OPS(fam_scatter_nonblocking);
     return;
@@ -2453,7 +2522,6 @@ void *fam::Impl_::fam_delete_backup(const char *BackupName) {
     FAM_PROFILE_END_OPS(fam_delete_backup);
     return result;
 }
-
 void fam::Impl_::fam_delete_backup_wait(void *waitObj) {
     FAM_CNTR_INC_API(fam_delete_backup_wait);
     FAM_PROFILE_START_ALLOCATOR(fam_backup_wait);
@@ -5715,7 +5783,19 @@ void fam::fam_stat(Fam_Region_Descriptor *descriptor, Fam_Stat *famInfo) {
 void fam::fam_get_blocking(void *local, Fam_Descriptor *descriptor,
                            uint64_t offset, uint64_t nbytes) {
     TRY_CATCH_BEGIN
-    pimpl_->fam_get_blocking(local, descriptor, offset, nbytes);
+    fam_local_buffer_info localBuf;
+    pimpl_->fill_buffer_info(&localBuf, local, nbytes);
+    pimpl_->fam_get_blocking(&localBuf, descriptor, offset, nbytes);
+    RETURN_WITH_FAM_EXCEPTION
+}
+
+void fam::fam_get_blocking(fam_local_buffer *local, size_t localOffset,
+                           Fam_Descriptor *descriptor,
+                           uint64_t offset, uint64_t nbytes) {
+    TRY_CATCH_BEGIN
+    fam_local_buffer_info localBuf;
+    fill_buffer_info(&localBuf, local, localOffset, nbytes, true);
+    pimpl_->fam_get_blocking(&localBuf, descriptor, offset, nbytes);
     RETURN_WITH_FAM_EXCEPTION
 }
 
@@ -5736,7 +5816,19 @@ void fam::fam_get_blocking(void *local, Fam_Descriptor *descriptor,
 void fam::fam_get_nonblocking(void *local, Fam_Descriptor *descriptor,
                               uint64_t offset, uint64_t nbytes) {
     TRY_CATCH_BEGIN
-    pimpl_->fam_get_nonblocking(local, descriptor, offset, nbytes);
+    fam_local_buffer_info localBuf;
+    pimpl_->fill_buffer_info(&localBuf, local, nbytes);
+    pimpl_->fam_get_nonblocking(&localBuf, descriptor, offset, nbytes);
+    RETURN_WITH_FAM_EXCEPTION
+}
+
+void fam::fam_get_nonblocking(fam_local_buffer *local, size_t localOffset,
+                              Fam_Descriptor *descriptor,
+                              uint64_t offset, uint64_t nbytes) {
+    TRY_CATCH_BEGIN
+    fam_local_buffer_info localBuf;
+    fill_buffer_info(&localBuf, local, localOffset, nbytes, true);
+    pimpl_->fam_get_nonblocking(&localBuf, descriptor, offset, nbytes);
     RETURN_WITH_FAM_EXCEPTION
 }
 
@@ -5759,7 +5851,19 @@ void fam::fam_get_nonblocking(void *local, Fam_Descriptor *descriptor,
 void fam::fam_put_blocking(void *local, Fam_Descriptor *descriptor,
                            uint64_t offset, uint64_t nbytes) {
     TRY_CATCH_BEGIN
-    pimpl_->fam_put_blocking(local, descriptor, offset, nbytes);
+    fam_local_buffer_info localBuf;
+    pimpl_->fill_buffer_info(&localBuf, local, nbytes);
+    pimpl_->fam_put_blocking(&localBuf, descriptor, offset, nbytes);
+    RETURN_WITH_FAM_EXCEPTION
+}
+
+void fam::fam_put_blocking(fam_local_buffer *local, size_t localOffset,
+                           Fam_Descriptor *descriptor,
+                           uint64_t offset, uint64_t nbytes) {
+    TRY_CATCH_BEGIN
+    fam_local_buffer_info localBuf;
+    fill_buffer_info(&localBuf, local, localOffset, nbytes, false);
+    pimpl_->fam_put_blocking(&localBuf, descriptor, offset, nbytes);
     RETURN_WITH_FAM_EXCEPTION
 }
 
@@ -5780,7 +5884,19 @@ void fam::fam_put_blocking(void *local, Fam_Descriptor *descriptor,
 void fam::fam_put_nonblocking(void *local, Fam_Descriptor *descriptor,
                               uint64_t offset, uint64_t nbytes) {
     TRY_CATCH_BEGIN
-    pimpl_->fam_put_nonblocking(local, descriptor, offset, nbytes);
+    fam_local_buffer_info localBuf;
+    pimpl_->fill_buffer_info(&localBuf, local, nbytes);
+    pimpl_->fam_put_nonblocking(&localBuf, descriptor, offset, nbytes);
+    RETURN_WITH_FAM_EXCEPTION
+}
+
+void fam::fam_put_nonblocking(fam_local_buffer *local, size_t localOffset,
+                              Fam_Descriptor *descriptor,
+                              uint64_t offset, uint64_t nbytes) {
+    TRY_CATCH_BEGIN
+    fam_local_buffer_info localBuf;
+    fill_buffer_info(&localBuf, local, localOffset, nbytes, false);
+    pimpl_->fam_put_nonblocking(&localBuf, descriptor, offset, nbytes);
     RETURN_WITH_FAM_EXCEPTION
 }
 
@@ -5841,7 +5957,23 @@ void fam::fam_gather_blocking(void *local, Fam_Descriptor *descriptor,
                               uint64_t nElements, uint64_t firstElement,
                               uint64_t stride, uint64_t elementSize) {
     TRY_CATCH_BEGIN
-    pimpl_->fam_gather_blocking(local, descriptor, nElements, firstElement,
+    fam_local_buffer_info localBuf;
+    size_t nbytes = nElements * elementSize;
+    pimpl_->fill_buffer_info(&localBuf, local, nbytes);
+    pimpl_->fam_gather_blocking(&localBuf, descriptor, nElements, firstElement,
+                                stride, elementSize);
+    RETURN_WITH_FAM_EXCEPTION
+}
+
+void fam::fam_gather_blocking(fam_local_buffer *local, size_t localOffset,
+                              Fam_Descriptor *descriptor,
+                              uint64_t nElements, uint64_t firstElement,
+                              uint64_t stride, uint64_t elementSize) {
+    TRY_CATCH_BEGIN
+    fam_local_buffer_info localBuf;
+    size_t nbytes = nElements * elementSize;
+    fill_buffer_info(&localBuf, local, localOffset, nbytes, true);
+    pimpl_->fam_gather_blocking(&localBuf, descriptor, nElements, firstElement,
                                 stride, elementSize);
     RETURN_WITH_FAM_EXCEPTION
 }
@@ -5871,7 +6003,23 @@ void fam::fam_gather_blocking(void *local, Fam_Descriptor *descriptor,
                               uint64_t nElements, uint64_t *elementIndex,
                               uint64_t elementSize) {
     TRY_CATCH_BEGIN
-    pimpl_->fam_gather_blocking(local, descriptor, nElements, elementIndex,
+    fam_local_buffer_info localBuf;
+    size_t nbytes = nElements * elementSize;
+    pimpl_->fill_buffer_info(&localBuf, local, nbytes);
+    pimpl_->fam_gather_blocking(&localBuf, descriptor, nElements, elementIndex,
+                                elementSize);
+    RETURN_WITH_FAM_EXCEPTION
+}
+
+void fam::fam_gather_blocking(fam_local_buffer *local, size_t localOffset,
+                              Fam_Descriptor *descriptor,
+                              uint64_t nElements, uint64_t *elementIndex,
+                              uint64_t elementSize) {
+    TRY_CATCH_BEGIN
+    fam_local_buffer_info localBuf;
+    size_t nbytes = nElements * elementSize;
+    fill_buffer_info(&localBuf, local, localOffset, nbytes, true);
+    pimpl_->fam_gather_blocking(&localBuf, descriptor, nElements, elementIndex,
                                 elementSize);
     RETURN_WITH_FAM_EXCEPTION
 }
@@ -5899,8 +6047,24 @@ void fam::fam_gather_nonblocking(void *local, Fam_Descriptor *descriptor,
                                  uint64_t nElements, uint64_t firstElement,
                                  uint64_t stride, uint64_t elementSize) {
     TRY_CATCH_BEGIN
-    pimpl_->fam_gather_nonblocking(local, descriptor, nElements, firstElement,
-                                   stride, elementSize);
+    fam_local_buffer_info localBuf;
+    size_t nbytes = nElements * elementSize;
+    pimpl_->fill_buffer_info(&localBuf, local, nbytes);
+    pimpl_->fam_gather_nonblocking(&localBuf, descriptor, nElements,
+                                   firstElement, stride, elementSize);
+    RETURN_WITH_FAM_EXCEPTION
+}
+
+void fam::fam_gather_nonblocking(fam_local_buffer *local, size_t localOffset,
+                                 Fam_Descriptor *descriptor,
+                                 uint64_t nElements, uint64_t firstElement,
+                                 uint64_t stride, uint64_t elementSize) {
+    TRY_CATCH_BEGIN
+    fam_local_buffer_info localBuf;
+    size_t nbytes = nElements * elementSize;
+    fill_buffer_info(&localBuf, local, localOffset, nbytes, true);
+    pimpl_->fam_gather_nonblocking(&localBuf, descriptor, nElements,
+                                   firstElement, stride, elementSize);
     RETURN_WITH_FAM_EXCEPTION
 }
 
@@ -5926,8 +6090,23 @@ void fam::fam_gather_nonblocking(void *local, Fam_Descriptor *descriptor,
                                  uint64_t nElements, uint64_t *elementIndex,
                                  uint64_t elementSize) {
     TRY_CATCH_BEGIN
-    pimpl_->fam_gather_nonblocking(local, descriptor, nElements, elementIndex,
-                                   elementSize);
+    fam_local_buffer_info localBuf;
+    pimpl_->fill_buffer_info(&localBuf, local, nElements * elementSize);
+    pimpl_->fam_gather_nonblocking(&localBuf, descriptor, nElements,
+                                   elementIndex, elementSize);
+    RETURN_WITH_FAM_EXCEPTION
+}
+
+void fam::fam_gather_nonblocking(fam_local_buffer *local, size_t localOffset,
+                                 Fam_Descriptor *descriptor,
+                                 uint64_t nElements, uint64_t *elementIndex,
+                                 uint64_t elementSize) {
+    TRY_CATCH_BEGIN
+    fam_local_buffer_info localBuf;
+    size_t nbytes = nElements * elementSize;
+    fill_buffer_info(&localBuf, local, localOffset, nbytes, true);
+    pimpl_->fam_gather_nonblocking(&localBuf, descriptor, nElements,
+                                   elementIndex, elementSize);
     RETURN_WITH_FAM_EXCEPTION
 }
 
@@ -5957,7 +6136,23 @@ void fam::fam_scatter_blocking(void *local, Fam_Descriptor *descriptor,
                                uint64_t nElements, uint64_t firstElement,
                                uint64_t stride, uint64_t elementSize) {
     TRY_CATCH_BEGIN
-    pimpl_->fam_scatter_blocking(local, descriptor, nElements, firstElement,
+    fam_local_buffer_info localBuf;
+    size_t nbytes = nElements * elementSize;
+    pimpl_->fill_buffer_info(&localBuf, local, nbytes);
+    pimpl_->fam_scatter_blocking(&localBuf, descriptor, nElements, firstElement,
+                                 stride, elementSize);
+    RETURN_WITH_FAM_EXCEPTION
+}
+
+void fam::fam_scatter_blocking(fam_local_buffer *local, size_t localOffset,
+                               Fam_Descriptor *descriptor,
+                               uint64_t nElements, uint64_t firstElement,
+                               uint64_t stride, uint64_t elementSize) {
+    TRY_CATCH_BEGIN
+    fam_local_buffer_info localBuf;
+    size_t nbytes = nElements * elementSize;
+    fill_buffer_info(&localBuf, local, localOffset, nbytes, false);
+    pimpl_->fam_scatter_blocking(&localBuf, descriptor, nElements, firstElement,
                                  stride, elementSize);
     RETURN_WITH_FAM_EXCEPTION
 }
@@ -5986,7 +6181,23 @@ void fam::fam_scatter_blocking(void *local, Fam_Descriptor *descriptor,
                                uint64_t nElements, uint64_t *elementIndex,
                                uint64_t elementSize) {
     TRY_CATCH_BEGIN
-    pimpl_->fam_scatter_blocking(local, descriptor, nElements, elementIndex,
+    fam_local_buffer_info localBuf;
+    size_t nbytes = nElements * elementSize;
+    pimpl_->fill_buffer_info(&localBuf, local, nbytes);
+    pimpl_->fam_scatter_blocking(&localBuf, descriptor, nElements, elementIndex,
+                                 elementSize);
+    RETURN_WITH_FAM_EXCEPTION
+}
+
+void fam::fam_scatter_blocking(fam_local_buffer *local, size_t localOffset,
+                               Fam_Descriptor *descriptor,
+                               uint64_t nElements, uint64_t *elementIndex,
+                               uint64_t elementSize) {
+    TRY_CATCH_BEGIN
+    fam_local_buffer_info localBuf;
+    size_t nbytes = nElements * elementSize;
+    fill_buffer_info(&localBuf, local, localOffset, nbytes, false);
+    pimpl_->fam_scatter_blocking(&localBuf, descriptor, nElements, elementIndex,
                                  elementSize);
     RETURN_WITH_FAM_EXCEPTION
 }
@@ -6016,8 +6227,23 @@ void fam::fam_scatter_nonblocking(void *local, Fam_Descriptor *descriptor,
                                   uint64_t nElements, uint64_t firstElement,
                                   uint64_t stride, uint64_t elementSize) {
     TRY_CATCH_BEGIN
-    pimpl_->fam_scatter_nonblocking(local, descriptor, nElements, firstElement,
-                                    stride, elementSize);
+    fam_local_buffer_info localBuf;
+    pimpl_->fill_buffer_info(&localBuf, local, nElements * elementSize);
+    pimpl_->fam_scatter_nonblocking(&localBuf, descriptor, nElements,
+                                    firstElement, stride, elementSize);
+    RETURN_WITH_FAM_EXCEPTION
+}
+
+void fam::fam_scatter_nonblocking(fam_local_buffer *local, size_t localOffset,
+                                  Fam_Descriptor *descriptor,
+                                  uint64_t nElements, uint64_t firstElement,
+                                  uint64_t stride, uint64_t elementSize) {
+    TRY_CATCH_BEGIN
+    fam_local_buffer_info localBuf;
+    size_t nbytes = nElements * elementSize;
+    fill_buffer_info(&localBuf, local, localOffset, nbytes, false);
+    pimpl_->fam_scatter_nonblocking(&localBuf, descriptor, nElements,
+                                    firstElement, stride, elementSize);
     RETURN_WITH_FAM_EXCEPTION
 }
 
@@ -6044,8 +6270,24 @@ void fam::fam_scatter_nonblocking(void *local, Fam_Descriptor *descriptor,
                                   uint64_t nElements, uint64_t *elementIndex,
                                   uint64_t elementSize) {
     TRY_CATCH_BEGIN
-    pimpl_->fam_scatter_nonblocking(local, descriptor, nElements, elementIndex,
-                                    elementSize);
+    fam_local_buffer_info localBuf;
+    size_t nbytes = nElements * elementSize;
+    pimpl_->fill_buffer_info(&localBuf, local, nbytes);
+    pimpl_->fam_scatter_nonblocking(&localBuf, descriptor, nElements,
+                                    elementIndex, elementSize);
+    RETURN_WITH_FAM_EXCEPTION
+}
+
+void fam::fam_scatter_nonblocking(fam_local_buffer *local, size_t localOffset,
+                                  Fam_Descriptor *descriptor,
+                                  uint64_t nElements, uint64_t *elementIndex,
+                                  uint64_t elementSize) {
+    TRY_CATCH_BEGIN
+    fam_local_buffer_info localBuf;
+    size_t nbytes = nElements * elementSize;
+    fill_buffer_info(&localBuf, local, localOffset, nbytes, false);
+    pimpl_->fam_scatter_nonblocking(&localBuf, descriptor, nElements,
+                                    elementIndex, elementSize);
     RETURN_WITH_FAM_EXCEPTION
 }
 
@@ -6945,6 +7187,15 @@ void fam::fam_context_close(fam_context *ctx) {
     RETURN_WITH_FAM_EXCEPTION
 }
 
+fam_local_buffer *fam::fam_local_buffer_register(
+                                        void *start, size_t len,
+                                        bool putOnly, bool remoteAccess)
+{
+    TRY_CATCH_BEGIN
+    return pimpl_->fam_local_buffer_register(start, len, putOnly, remoteAccess);
+    RETURN_WITH_FAM_EXCEPTION
+}
+
 /**
  * fam() - constructor for fam class
  */
@@ -7081,5 +7332,4 @@ void fam_context::fam_context_close(fam_context *) {
         Fam_Exception, FAM_ERR_NOPERM,
         "fam_context_close cannot be invoked from fam_context object");
 }
-
-} // namespace openfam
+}// namespace openfam

@@ -29,7 +29,7 @@ if len(sys.argv) > 2:
 else:
     openfam_test_arg=""
 
-command_line = os.environ["OPENFAM_TEST_COMMAND"] + " " + os.environ["OPENFAM_TEST_OPT"] + " " + openfam_test_exe + " " + openfam_test_arg
+command_line = os.environ["OPENFAM_TEST_COMMAND"] + " -N 1 --exclusive /home/jbyrne/wrapper.sh " + openfam_test_exe + " " + openfam_test_arg
 print("Test Command : " + command_line)
 result = os.system(command_line)
 #If the return code from test is 77 return that back to gtest

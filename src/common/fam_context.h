@@ -48,6 +48,24 @@ using namespace std;
 
 namespace openfam {
 
+#ifdef __cpp_lib_hardware_interference_size
+    #define CACHE_LINE_SIZE std::hardware_destructive_interference_size
+#else
+    #define CACHE_LINE_SIZE ((size_t)64)
+#endif
+
+union alignas(CACHE_LINE_SIZE) Fam_Atomic_Types {
+    int32_t i32;
+    uint32_t u32;
+    int64_t i64;
+    uint64_t u64;
+    int128_t i128;
+    float f;
+    double d;
+};
+
+#define FAM_CONTEXT_ATOMIC_BUFFERS  (3)
+
 class Fam_Context {
   public:
     Fam_Context(Fam_Thread_Model famTM);
@@ -121,15 +139,6 @@ class Fam_Context {
     }
     void register_heap(void *base, size_t len, struct fid_domain *domain,
                        size_t iov_limit);
-    void **get_mr_descs(const void *local_addr, size_t local_size) {
-        if (local_buf_size != 0 &&
-            (char *)local_addr >= (char *)local_buf_base &&
-            (char *)local_addr + local_size <=
-                (char *)local_buf_base + local_buf_size)
-            return mr_descs;
-        else
-            return 0;
-    }
 
   private:
     struct fid_ep *ep;
@@ -137,10 +146,6 @@ class Fam_Context {
     struct fid_cq *rxcq;
     struct fid_cntr *txCntr;
     struct fid_cntr *rxCntr;
-    void **mr_descs = NULL;
-    void *local_buf_base = NULL;
-    size_t local_buf_size = 0;
-    struct fid_mr *mr = NULL;
 
     uint64_t numTxOps;
     uint64_t numRxOps;
@@ -149,6 +154,25 @@ class Fam_Context {
     uint64_t numLastRxFailCnt;
     Fam_Thread_Model famThreadModel;
     pthread_rwlock_t ctxRWLock;
+    std::vector<union Fam_Atomic_Types> atomic_buffer;
+    struct fid_mr *atomic_mr = nullptr;
+    void *atomic_desc;
+
+    friend void fabric_atomic(uint64_t key, void *value, uint64_t offset,
+                              enum fi_op op, enum fi_datatype datatype,
+                              size_t typeSize, fi_addr_t fiAddr,
+                              Fam_Context *famCtx);
+
+    friend void fabric_fetch_atomic(uint64_t key, void *value, void *result,
+                                    uint64_t offset, enum fi_op op,
+                                    enum fi_datatype datatype, size_t typeSize,
+                                    fi_addr_t fiAddr, Fam_Context *famCtx);
+
+    friend void fabric_compare_atomic(uint64_t key, void *value, void *result,
+                                      void *compare, uint64_t offset,
+                                      enum fi_op op, enum fi_datatype datatype,
+                                      size_t typeSize, fi_addr_t fiAddr,
+                                      Fam_Context *famCtx);
 };
 
 } // namespace openfam

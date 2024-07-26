@@ -110,7 +110,8 @@ TEST(DataitemInterleaving, PutGetSuccess) {
 
     uint64_t INTERLEAVE_SIZE = item->get_interleave_size();
 
-    char *local = (char *)malloc(6 * INTERLEAVE_SIZE);
+    char *local = (char *)malloc(6 * INTERLEAVE_SIZE + 1);
+    local[6 * INTERLEAVE_SIZE] = '\0';
     memset(local, 'a', INTERLEAVE_SIZE);
     memset((void *)((uint64_t)local + INTERLEAVE_SIZE), 'b', INTERLEAVE_SIZE);
     memset((void *)((uint64_t)local + 2 * INTERLEAVE_SIZE), 'c',
@@ -126,7 +127,8 @@ TEST(DataitemInterleaving, PutGetSuccess) {
         my_fam->fam_put_blocking(local, item, 8, 6 * INTERLEAVE_SIZE));
 
     // allocate local memory to receive 20 elements
-    char *local2 = (char *)malloc(6 * INTERLEAVE_SIZE);
+    char *local2 = (char *)malloc(6 * INTERLEAVE_SIZE + 1);
+    local2[6 * INTERLEAVE_SIZE] = '\0';
 
     EXPECT_NO_THROW(
         my_fam->fam_get_blocking(local2, item, 8, 6 * INTERLEAVE_SIZE));
@@ -202,7 +204,8 @@ TEST(DataitemInterleaving, PutGetNonblockSuccess) {
 
     uint64_t INTERLEAVE_SIZE = item->get_interleave_size();
 
-    char *local = (char *)malloc(6 * INTERLEAVE_SIZE);
+    char *local = (char *)malloc(6 * INTERLEAVE_SIZE + 1);
+    local[6 * INTERLEAVE_SIZE] = '\0';
     memset(local, 'a', INTERLEAVE_SIZE);
     memset((void *)((uint64_t)local + INTERLEAVE_SIZE), 'b', INTERLEAVE_SIZE);
     memset((void *)((uint64_t)local + 2 * INTERLEAVE_SIZE), 'c',
@@ -219,7 +222,8 @@ TEST(DataitemInterleaving, PutGetNonblockSuccess) {
 
     EXPECT_NO_THROW(my_fam->fam_quiet());
     // allocate local memory to receive 20 elements
-    char *local2 = (char *)malloc(6 * INTERLEAVE_SIZE);
+    char *local2 = (char *)malloc(6 * INTERLEAVE_SIZE + 1);
+    local2[6 * INTERLEAVE_SIZE] = '\0';
 
     EXPECT_NO_THROW(
         my_fam->fam_get_nonblocking(local2, item, 8, 6 * INTERLEAVE_SIZE));
@@ -634,7 +638,8 @@ TEST(DataitemInterleaving, Copy) {
 
     uint64_t INTERLEAVE_SIZE = srcItem->get_interleave_size();
 
-    char *local = (char *)malloc(6 * INTERLEAVE_SIZE);
+    char *local = (char *)malloc(6 * INTERLEAVE_SIZE + 1);
+    local[6 * INTERLEAVE_SIZE] = '\0';
     memset(local, 'a', INTERLEAVE_SIZE);
     memset((void *)((uint64_t)local + INTERLEAVE_SIZE), 'b', INTERLEAVE_SIZE);
     memset((void *)((uint64_t)local + 2 * INTERLEAVE_SIZE), 'c',
@@ -732,7 +737,8 @@ TEST(DataitemInterleaving, Copy) {
         EXPECT_NO_THROW(my_fam->fam_copy_wait(waitObj[i]));
     }
 
-    char *local2 = (char *)malloc(6 * INTERLEAVE_SIZE);
+    char *local2 = (char *)malloc(6 * INTERLEAVE_SIZE + 1);
+    local2[6 * INTERLEAVE_SIZE] = '\0';
 
     for (int i = 0; i < ITERATION; i++) {
         EXPECT_NO_THROW(my_fam->fam_get_blocking(local2, destItem[i], 1024,
@@ -919,7 +925,8 @@ TEST(DataitemInterleaving, RestoreSuccess) {
 
     EXPECT_NO_THROW(my_fam->fam_restore_wait(waitobj));
 
-    char *local = (char *)malloc(6 * backupInterleaveSize);
+    char *local = (char *)malloc(6 * backupInterleaveSize + 1);
+    local[6 * backupInterleaveSize] = '\0';
     memset(local, 'a', backupInterleaveSize);
     memset((void *)((uint64_t)local + backupInterleaveSize), 'b',
            backupInterleaveSize);
@@ -932,7 +939,8 @@ TEST(DataitemInterleaving, RestoreSuccess) {
     memset((void *)((uint64_t)local + 5 * backupInterleaveSize), 'f',
            backupInterleaveSize);
     // Restoring is complete. Now get the content of restored data item
-    char *local2 = (char *)malloc(6 * backupInterleaveSize);
+    char *local2 = (char *)malloc(6 * backupInterleaveSize + 1);
+    local2[6 * backupInterleaveSize] = '\0';
     EXPECT_NO_THROW(
         my_fam->fam_get_blocking(local2, item, 0, 6 * backupInterleaveSize));
 
@@ -980,7 +988,8 @@ TEST(DataitemInterleaving, CreateDataitemRestoreSuccess) {
         GTEST_SKIP();
     }
 
-    char *local = (char *)malloc(6 * backupInterleaveSize);
+    char *local = (char *)malloc(6 * backupInterleaveSize + 1);
+    local[6 * backupInterleaveSize] = '\0';
     memset(local, 'a', backupInterleaveSize);
     memset((void *)((uint64_t)local + backupInterleaveSize), 'b',
            backupInterleaveSize);
@@ -1024,7 +1033,8 @@ TEST(DataitemInterleaving, CreateDataitemRestoreSuccess) {
     }
 
     // Restoring is complete. Now get the content of restored data item
-    char *local2 = (char *)malloc(6 * backupInterleaveSize);
+    char *local2 = (char *)malloc(6 * backupInterleaveSize + 1);
+    local2[6 * backupInterleaveSize] = '\0';
     EXPECT_NO_THROW(
         my_fam->fam_get_blocking(local2, item, 0, 6 * backupInterleaveSize));
     EXPECT_STREQ(local, local2);

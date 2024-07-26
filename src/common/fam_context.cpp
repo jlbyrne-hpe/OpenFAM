@@ -83,9 +83,7 @@ Fam_Context::Fam_Context(struct fi_info *fi, struct fid_domain *domain,
     struct fi_cq_attr cq_attr;
     memset(&cq_attr, 0, sizeof(cq_attr));
     cq_attr.format = FI_CQ_FORMAT_DATA;
-    if((strncmp(fi->fabric_attr->prov_name, "cxi", 3) != 0)) {
-    	cq_attr.wait_obj = FI_WAIT_UNSPEC;
-    }
+    cq_attr.wait_obj = FI_WAIT_UNSPEC;
     cq_attr.wait_cond = FI_CQ_COND_NONE;
 
     /* Set the cq size unless a default is in play. */
@@ -140,18 +138,33 @@ Fam_Context::Fam_Context(struct fi_info *fi, struct fid_domain *domain,
         message << "Fam libfabric fi_ep_bind failed: " << fabric_strerror(ret);
         THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
     }
+
+    if (famThreadModel == FAM_THREAD_SERIALIZE) {
+        atomic_buffer.resize(FAM_CONTEXT_ATOMIC_BUFFERS);
+
+        uint64_t key = 0;
+        size_t bufferSize = atomic_buffer.size() * sizeof(atomic_buffer[0]);
+        ret = fabric_register_mr(&atomic_buffer[0], bufferSize,
+                                 &key, domain, NULL, fi->fabric_attr->prov_name,
+                                 true, atomic_mr);
+        if (ret < 0) {
+            message << "Fam libfabric atomic_buffer registration failed: " <<
+                fabric_strerror(ret);
+            THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
+        }
+        atomic_desc = fi_mr_desc(atomic_mr);
+    }
 }
 
 Fam_Context::~Fam_Context() {
     if (!isNVMM) {
-        free(mr_descs);
-        if (mr != NULL)
-            fi_close(&mr->fid);
         fi_close(&ep->fid);
         fi_close(&txcq->fid);
         fi_close(&rxcq->fid);
         fi_close(&txCntr->fid);
         fi_close(&rxCntr->fid);
+        if (atomic_mr)
+            fi_close(&atomic_mr->fid);
     }
     pthread_rwlock_destroy(&ctxRWLock);
 }
@@ -174,31 +187,6 @@ int Fam_Context::initialize_cntr(struct fid_domain *domain,
     }
 
     return ret;
-}
-
-void Fam_Context::register_heap(void *base, size_t len,
-                                struct fid_domain *domain, size_t iov_limit) {
-    std::ostringstream message;
-    int ret;
-    local_buf_base = base;
-    local_buf_size = len;
-
-    if (mr || mr_descs) {
-        message << "Fam_Context register_heap() called more than once";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-    mr_descs = (void **)calloc(iov_limit, sizeof(*mr_descs));
-    if (!mr_descs) {
-        message << "Fam_Context register_heap() failed to allocate memory";
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-    ret = fi_mr_reg(domain, base, len, FI_READ | FI_WRITE, 0, 0, 0, &mr, 0);
-    if (ret < 0) {
-        message << "Fam libfabric fi_mr_reg failed: " << fabric_strerror(ret);
-        THROW_ERR_MSG(Fam_Datapath_Exception, message.str().c_str());
-    }
-    for (size_t i = 0; i < iov_limit; i++)
-        mr_descs[i] = fi_mr_desc(mr);
 }
 
 } // namespace openfam

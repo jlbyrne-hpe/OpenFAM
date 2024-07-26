@@ -42,7 +42,6 @@
 #include <sstream>
 
 using namespace std;
-using namespace openfam;
 
 #define int__ true
 #define void__
@@ -56,6 +55,27 @@ using namespace openfam;
         throw Fam_Unimplemented_Exception(message.str().c_str());              \
         return type;                                                           \
     }
+
+struct fid_mr;
+
+namespace openfam {
+
+class Fam_Ops;
+
+class fam_local_buffer::Impl {
+  public:
+    Impl(Fam_Ops *famOps, void *start, size_t len,
+         bool putOnly, bool remoteAccess);
+    ~Impl();
+
+    Fam_Ops *famOps;
+    uintptr_t start;
+    size_t len;
+    struct fid_mr *mr;
+    char *epAddr;              // Valid only if remote_mr not nullptr
+    size_t epAddrLen;
+    bool putOnly;              // Can't change registered memory
+};
 
 class Fam_Ops {
   public:
@@ -98,7 +118,8 @@ class Fam_Ops {
      * @return - 0 for successful completion, 1 for unsuccessful, and a negative
      * number in case of exceptions
      */
-    virtual int get_blocking(void *local, Fam_Descriptor *descriptor,
+    virtual int get_blocking(fam_local_buffer_info *localBuf,
+                             Fam_Descriptor *descriptor,
                              uint64_t offset, uint64_t nbytes) = 0;
 
     /**
@@ -111,7 +132,8 @@ class Fam_Ops {
      * from where memory should be copied
      * @param nbytes - number of bytes to be copied from global to local memory
      */
-    virtual void get_nonblocking(void *local, Fam_Descriptor *descriptor,
+    virtual void get_nonblocking(fam_local_buffer_info *localBuf,
+                                 Fam_Descriptor *descriptor,
                                  uint64_t offset, uint64_t nbytes) = 0;
 
     /**
@@ -125,7 +147,7 @@ class Fam_Ops {
      * @return - 0 for successful completion, 1 for unsuccessful completion,
      * negative number in case of exceptions
      */
-    virtual int put_blocking(void *local, Fam_Descriptor *descriptor,
+    virtual int put_blocking(fam_local_buffer_info *localBuf, Fam_Descriptor *descriptor,
                              uint64_t offset, uint64_t nbytes) = 0;
 
     /**
@@ -138,7 +160,8 @@ class Fam_Ops {
      * to where data should be copied
      * @param nbytes - number of bytes to be copied from local to FAM
      */
-    virtual void put_nonblocking(void *local, Fam_Descriptor *descriptor,
+    virtual void put_nonblocking(fam_local_buffer_info *localBuf,
+                                 Fam_Descriptor *descriptor,
                                  uint64_t offset, uint64_t nbytes) = 0;
 
     // GATHER/SCATTER subgroup
@@ -161,7 +184,8 @@ class Fam_Ops {
      * negative number in case of exception
      * @see #fam_scatter_strided
      */
-    virtual int gather_blocking(void *local, Fam_Descriptor *descriptor,
+    virtual int gather_blocking(fam_local_buffer_info *localBuf,
+                                Fam_Descriptor *descriptor,
                                 uint64_t nElements, uint64_t firstElement,
                                 uint64_t stride, uint64_t elementSize) = 0;
 
@@ -181,7 +205,8 @@ class Fam_Ops {
      * negative number in case errors
      * @see #fam_scatter_indexed
      */
-    virtual int gather_blocking(void *local, Fam_Descriptor *descriptor,
+    virtual int gather_blocking(fam_local_buffer_info *localBuf,
+                                Fam_Descriptor *descriptor,
                                 uint64_t nElements, uint64_t *elementIndex,
                                 uint64_t elementSize) = 0;
 
@@ -201,7 +226,8 @@ class Fam_Ops {
      * @param elementSize - size of the element in bytes
      * @see #fam_scatter_strided
      */
-    virtual void gather_nonblocking(void *local, Fam_Descriptor *descriptor,
+    virtual void gather_nonblocking(fam_local_buffer_info *localBuf,
+				    Fam_Descriptor *descriptor,
                                     uint64_t nElements, uint64_t firstElement,
                                     uint64_t stride, uint64_t elementSize) = 0;
 
@@ -219,7 +245,8 @@ class Fam_Ops {
      * @param elementSize - size of each element in bytes
      * @see #fam_scatter_indexed
      */
-    virtual void gather_nonblocking(void *local, Fam_Descriptor *descriptor,
+    virtual void gather_nonblocking(fam_local_buffer_info *localBuf,
+                                    Fam_Descriptor *descriptor,
                                     uint64_t nElements, uint64_t *elementIndex,
                                     uint64_t elementSize) = 0;
 
@@ -240,7 +267,8 @@ class Fam_Ops {
      * negative number in case errors
      * @see #fam_gather_strided
      */
-    virtual int scatter_blocking(void *local, Fam_Descriptor *descriptor,
+    virtual int scatter_blocking(fam_local_buffer_info *localBuf,
+                                 Fam_Descriptor *descriptor,
                                  uint64_t nElements, uint64_t firstElement,
                                  uint64_t stride, uint64_t elementSize) = 0;
 
@@ -259,7 +287,8 @@ class Fam_Ops {
      * negative number in case errors
      * @see #fam_gather_indexed
      */
-    virtual int scatter_blocking(void *local, Fam_Descriptor *descriptor,
+    virtual int scatter_blocking(fam_local_buffer_info *localBuf,
+                                 Fam_Descriptor *descriptor,
                                  uint64_t nElements, uint64_t *elementIndex,
                                  uint64_t elementSize) = 0;
 
@@ -280,7 +309,8 @@ class Fam_Ops {
      * negative number in case errors
      * @see #fam_gather_strided
      */
-    virtual void scatter_nonblocking(void *local, Fam_Descriptor *descriptor,
+    virtual void scatter_nonblocking(fam_local_buffer_info *localBuf,
+                                     Fam_Descriptor *descriptor,
                                      uint64_t nElements, uint64_t firstElement,
                                      uint64_t stride, uint64_t elementSize) = 0;
 
@@ -299,7 +329,8 @@ class Fam_Ops {
      * negative number in case errors
      * @see #fam_gather_indexed
      */
-    virtual void scatter_nonblocking(void *local, Fam_Descriptor *descriptor,
+    virtual void scatter_nonblocking(fam_local_buffer_info *localBuf,
+				     Fam_Descriptor *descriptor,
                                      uint64_t nElements, uint64_t *elementIndex,
                                      uint64_t elementSize) = 0;
 
@@ -739,6 +770,19 @@ class Fam_Ops {
     virtual uint64_t get_context_id() = 0;
 
     /**
+     * Support user buffer registration.
+     */
+    virtual void register_buffer(fam_local_buffer::Impl *pfbimpl,
+				 bool remoteAccess) {
+        if  (!remoteAccess)
+            return;
+        THROW_ERR_MSG(Fam_Datapath_Exception,
+                      "registration for remote access not supported");
+    }
+
+    virtual void deregister_buffer(fam_local_buffer::Impl *pfbimpl) {};
+
+    /**
      * fam() - constructor for fam class
      */
     Fam_Ops(){};
@@ -748,8 +792,6 @@ class Fam_Ops {
      */
     virtual ~Fam_Ops(){};
 
-    /* Local Buffer heap register passed by application */
-    virtual void register_heap(void *base, size_t len) = 0;
 };
-
+} // namespace openfam
 #endif

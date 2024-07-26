@@ -545,8 +545,13 @@ void *process_queue(void *arg) {
                     msgPointer->dstDataGdesc.offset + msgPointer->offset);
                 try {
                     // Write data to client's memory
+                    fam_local_buffer_info localBuf {
+                        .start = (uintptr_t)localPointerD,
+                        .len = msgPointer->size,
+                        .desc = NULL,
+                    };
                     ret = fabric_write(
-                        msgPointer->key, localPointerD, msgPointer->size,
+                        msgPointer->key, &localBuf, msgPointer->size,
                         msgPointer->srcBaseAddr, fiAddr,
                         famOpsLibfabricQ->get_defaultCtx(FAM_DEFAULT_CTX_ID));
                 } catch (...) {
@@ -647,8 +652,13 @@ void *process_queue(void *arg) {
                             ATOMIC_REGION_ID, offsetB);
                         // Read from Client's memory into buffer
                         try {
+                            fam_local_buffer_info localBuf {
+                                .start = (uintptr_t)localPointerB,
+                                .len = msgPointer->size,
+                                .desc = NULL,
+                            };
                             retStatus =
-                                fabric_read(msgPointer->key, localPointerB,
+                                fabric_read(msgPointer->key, &localBuf,
                                             msgPointer->size,
                                             msgPointer->srcBaseAddr, fiAddr,
                                             famOpsLibfabricQ->get_defaultCtx(
@@ -766,8 +776,13 @@ void *process_queue(void *arg) {
                         localPointerB = allocator->get_local_pointer(
                             ATOMIC_REGION_ID, offsetB);
                         try {
+                            fam_local_buffer_info localBuf {
+                                .start = (uintptr_t)localPointerB,
+                                .len = bufferSize,
+                                .desc = NULL,
+                            };
                             retStatus = fabric_read(
-                                msgPointer->key, localPointerB, bufferSize,
+                                msgPointer->key, &localBuf, bufferSize,
                                 msgPointer->srcBaseAddr, fiAddr,
                                 famOpsLibfabricQ->get_defaultCtx(
                                     FAM_DEFAULT_CTX_ID));
@@ -906,8 +921,13 @@ void *process_queue(void *arg) {
                         localPointerB = allocator->get_local_pointer(
                             ATOMIC_REGION_ID, offsetB);
                         try {
+                            fam_local_buffer_info localBuf {
+                                .start = (uintptr_t)localPointerB,
+                                .len = bufferSize,
+                                .desc = NULL,
+                            };
                             retStatus = fabric_read(
-                                msgPointer->key, localPointerB, bufferSize,
+                                msgPointer->key, &localBuf, bufferSize,
                                 msgPointer->srcBaseAddr, fiAddr,
                                 famOpsLibfabricQ->get_defaultCtx(
                                     FAM_DEFAULT_CTX_ID));
@@ -1014,8 +1034,13 @@ void *process_queue(void *arg) {
                 }
                 // Copy data to client's memory
                 try {
+                    fam_local_buffer_info localBuf {
+                        .start = (uintptr_t)bufferPtr,
+                        .len = bufferSize,
+                        .desc = NULL,
+                    };
                     retStatus = fabric_write(
-                        msgPointer->key, bufferPtr, bufferSize,
+                        msgPointer->key, &localBuf, bufferSize,
                         msgPointer->srcBaseAddr, fiAddr,
                         famOpsLibfabricQ->get_defaultCtx(FAM_DEFAULT_CTX_ID));
                 } catch (...) {
@@ -1062,8 +1087,13 @@ void *process_queue(void *arg) {
                 }
                 // Copy data back to client's memory
                 try {
+                    fam_local_buffer_info localBuf {
+                        .start = (uintptr_t)bufferPtr,
+                        .len = bufferSize,
+                        .desc = NULL,
+                    };
                     retStatus = fabric_write(
-                        msgPointer->key, bufferPtr, bufferSize,
+                        msgPointer->key, &localBuf, bufferSize,
                         msgPointer->srcBaseAddr, fiAddr,
                         famOpsLibfabricQ->get_defaultCtx(FAM_DEFAULT_CTX_ID));
                 } catch (...) {

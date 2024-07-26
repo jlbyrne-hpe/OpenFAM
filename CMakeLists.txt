@@ -169,7 +169,8 @@ include_directories(/usr/local/include)
 # Set openFAM options to be used only by test. Some individual test cases might override these options.
 # To use the following OpenFAM options set USE_FAM_OPTION flag
 set( TEST_NPE 1 ) #Number of pe used with mpirun
-set( TEST_RUNTIME "PMIX" )
+#set( TEST_RUNTIME "PMIX" )
+set( TEST_RUNTIME "PMI2" )
 
 if (SET_FAM_OPTION)
        set( TEST_DEFAULT_REGION "Default" )

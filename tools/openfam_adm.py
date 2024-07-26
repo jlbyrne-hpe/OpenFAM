@@ -761,10 +761,13 @@ if args.start_service:
                     + "--nodelist=" + memory_server_addr + " "
                     + "--comment=" + key_string + " "
                     + command_options + " "
+#                    + "~/tools/debug_wrapper "
+#                    + "strace -o ~/strace.out -o ~/strace.memory_server.out -f -s 1500 "
                     + openfam_install_path
                     + "/bin/memory_server -m "
                     + memory_server_id
-                    + " &"
+                    + " &> ~/memory_server.out." + memory_server_id + " &"
+#                    + " &"
                 )
             else:
                 cmd = (
@@ -814,12 +817,14 @@ if args.start_service:
                     + "--nodelist=" + metadata_server_addr + " "
                     + "--comment=" + key_string + " "
                     + command_options + " "
+#                    + "~/tools/debug_wrapper "
                     + openfam_install_path
                     + "/bin/metadata_server -a "
                     + metadata_server_addr
                     + " -r "
                     + str(metadata_server_rpc_port)
-                    + " &"
+                    + " &> ~/metadata_server.out &"
+#                    + " &"
                 )
             else:
                 cmd = (
@@ -865,11 +870,13 @@ if args.start_service:
                 + openfam_admin_tool_config_doc["launcher_options"]["common"] + " "
                 + openfam_admin_tool_config_doc["launcher_options"]["cis"] + " "
                 + openfam_install_path
+#                + "~/tools/debug_wrapper "
                 + "/bin/cis_server -a "
                 + cis_addr
                 + " -r "
                 + str(cis_rpc_port)
-                + " &"
+                + " &> ~/cis_server.out &"
+#                + " &"
             )
         else:
             cmd = (
