@@ -50,7 +50,7 @@ Fam_Options fam_opts;
 #define EXPECT_FAMEX(statement) EXPECT_THROW(statement, Fam_Exception)
 
 static void checkPutGetNoThrow(Fam_Descriptor *item, fam_local_buffer *fb,
-			       size_t localOffset, size_t len)
+                               size_t localOffset, size_t len)
 {
     EXPECT_NO_THROW(my_fam->fam_put_blocking(fb, localOffset, item, 0, len));
     EXPECT_NO_THROW(my_fam->fam_get_blocking(fb, localOffset, item, 0, len));
@@ -61,45 +61,45 @@ static void checkPutGetNoThrow(Fam_Descriptor *item, fam_local_buffer *fb,
 }
 
 static void checkScatterGatherNoThrow(
-	Fam_Descriptor *item, fam_local_buffer *fb, uint64_t *indexes,
-	size_t localOffset, size_t count)
+        Fam_Descriptor *item, fam_local_buffer *fb, uint64_t *indexes,
+        size_t localOffset, size_t count)
 {
     EXPECT_NO_THROW(my_fam->fam_scatter_blocking(fb, localOffset, item, count,
-						 indexes, sizeof(MYTYPE)));
+                                                 indexes, sizeof(MYTYPE)));
     EXPECT_NO_THROW(my_fam->fam_gather_blocking(fb, localOffset, item, count,
-						indexes, sizeof(MYTYPE)));
+                                                indexes, sizeof(MYTYPE)));
     EXPECT_NO_THROW(my_fam->fam_scatter_blocking(fb, localOffset, item, count,
-						 0, 2, sizeof(MYTYPE)));
+                                                 0, 2, sizeof(MYTYPE)));
     EXPECT_NO_THROW(my_fam->fam_gather_blocking(fb, localOffset, item, count,
-						0, 2, sizeof(MYTYPE)));
+                                                0, 2, sizeof(MYTYPE)));
 
     EXPECT_NO_THROW(my_fam->fam_scatter_nonblocking(fb, localOffset, item,
-						    count, indexes,
-						    sizeof(MYTYPE)));
+                                                    count, indexes,
+                                                    sizeof(MYTYPE)));
     EXPECT_NO_THROW(my_fam->fam_gather_nonblocking(fb, localOffset, item, count,
-						   indexes, sizeof(MYTYPE)));
+                                                   indexes, sizeof(MYTYPE)));
     EXPECT_NO_THROW(my_fam->fam_scatter_nonblocking(fb, localOffset, item,
-						    count, 0, 2,
-						    sizeof(MYTYPE)));
+                                                    count, 0, 2,
+                                                    sizeof(MYTYPE)));
     EXPECT_NO_THROW(my_fam->fam_gather_nonblocking(fb, localOffset, item, count,
-						   0, 2, sizeof(MYTYPE)));
+                                                   0, 2, sizeof(MYTYPE)));
     EXPECT_NO_THROW(my_fam->fam_quiet());
 }
 
 static void checkPutGetFamEx(Fam_Descriptor *item, fam_local_buffer *fb,
-			     size_t localOffset, size_t len)
+                             size_t localOffset, size_t len)
 {
     EXPECT_FAMEX(my_fam->fam_put_blocking(fb, localOffset, item, 0, len));
     EXPECT_FAMEX(my_fam->fam_get_blocking(fb, localOffset, item, 0, len));
 
     EXPECT_FAMEX(my_fam->fam_put_nonblocking(fb, localOffset, item, 0, len));
     EXPECT_FAMEX(my_fam->fam_get_nonblocking(fb, localOffset, item, 0, len));
-    EXPECT_FAMEX(my_fam->fam_quiet());
+    EXPECT_NO_THROW(my_fam->fam_quiet());
 }
 
 static void checkScatterGatherFamEx(
-	Fam_Descriptor *item, fam_local_buffer *fb,uint64_t *indexes,
-	size_t localOffset, size_t count)
+        Fam_Descriptor *item, fam_local_buffer *fb,uint64_t *indexes,
+        size_t localOffset, size_t count)
 {
     EXPECT_FAMEX(my_fam->fam_scatter_blocking(fb, localOffset, item, count,
                                               indexes, sizeof(MYTYPE)));
@@ -111,15 +111,15 @@ static void checkScatterGatherFamEx(
                                              0, 2, sizeof(MYTYPE)));
 
     EXPECT_FAMEX(my_fam->fam_scatter_nonblocking(fb, localOffset, item,
-						 count, indexes,
-						 sizeof(MYTYPE)));
+                                                 count, indexes,
+                                                 sizeof(MYTYPE)));
     EXPECT_FAMEX(my_fam->fam_gather_nonblocking(fb, localOffset, item, count,
-						indexes, sizeof(MYTYPE)));
+                                                indexes, sizeof(MYTYPE)));
     EXPECT_FAMEX(my_fam->fam_scatter_nonblocking(fb, localOffset, item,
-						 count, 0, 2, sizeof(MYTYPE)));
+                                                 count, 0, 2, sizeof(MYTYPE)));
     EXPECT_FAMEX(my_fam->fam_gather_nonblocking(fb, localOffset, item, count,
-						0, 2, sizeof(MYTYPE)));
-    EXPECT_FAMEX(my_fam->fam_quiet());
+                                                0, 2, sizeof(MYTYPE)));
+    EXPECT_NO_THROW(my_fam->fam_quiet());
 }
 
 static void checkLocalOutOfBounds(Fam_Descriptor *item, fam_local_buffer *fb,
@@ -165,11 +165,11 @@ static void checkLocalPutOnly(Fam_Descriptor *item, fam_local_buffer *fb)
     EXPECT_NO_THROW(my_fam->fam_quiet());
 
     EXPECT_NO_THROW(my_fam->fam_scatter_blocking(fb, 0, item, count,
-						 indexes, sizeof(MYTYPE)));
+                                                 indexes, sizeof(MYTYPE)));
     EXPECT_FAMEX(my_fam->fam_gather_blocking(fb, 0, item, count,
                                              indexes, sizeof(MYTYPE)));
     EXPECT_NO_THROW(my_fam->fam_scatter_blocking(fb, 0, item, count,
-						 0, 1, sizeof(MYTYPE)));
+                                                 0, 1, sizeof(MYTYPE)));
     EXPECT_FAMEX(my_fam->fam_gather_blocking(fb, 0, item, count,
                                              0, 1, sizeof(MYTYPE)));
 
@@ -178,7 +178,7 @@ static void checkLocalPutOnly(Fam_Descriptor *item, fam_local_buffer *fb)
     EXPECT_FAMEX(my_fam->fam_gather_nonblocking(fb, 0, item, count, indexes,
                                                 sizeof(MYTYPE)));
     EXPECT_NO_THROW(my_fam->fam_scatter_nonblocking(fb, 0, item, count, 0, 2,
-						    sizeof(MYTYPE)));
+                                                    sizeof(MYTYPE)));
     EXPECT_FAMEX(my_fam->fam_gather_nonblocking(fb, 0, item, count, 0, 2,
                                                 sizeof(MYTYPE)));
     EXPECT_NO_THROW(my_fam->fam_quiet());
@@ -271,7 +271,7 @@ TEST(FamBuffer, FamBufferSuccess) {
 
     // Put-only buffer to reset things.
     EXPECT_NO_THROW(fbZeroes = my_fam->fam_local_buffer_register(
-                        (void *)zeroes, local2Size));
+                        (void *)zeroes, local2Size, true));
     EXPECT_EQ((uintptr_t)zeroes, fbZeroes->get_start());
     EXPECT_EQ(fbZeroes->get_len(), local2Size);
     EXPECT_TRUE(fbZeroes->get_putOnly());
@@ -288,6 +288,7 @@ TEST(FamBuffer, FamBufferSuccess) {
     EXPECT_NO_THROW(my_fam->fam_get_blocking(fbLocal2, 0, item, 0, local1Size));
     for (i = 0; i < local1Count; i++)
         EXPECT_EQ(local2[i], local1[i]);
+
     // Offset the fam_local_buffer by sizeof(MYTYPE)
     EXPECT_NO_THROW(my_fam->fam_put_blocking(fbLocal2, sizeof(MYTYPE),
                                              item, 0, local1Size));
@@ -506,15 +507,15 @@ TEST(FamBuffer, FamBufferSuccess) {
     }
 
     // Offset the fam_local_buffer by sizeof(MYTYPE)
-    EXPECT_NO_THROW(my_fam->fam_gather_nonblocking(fbLocal2, 0,
+    EXPECT_NO_THROW(my_fam->fam_gather_nonblocking(fbLocal2, sizeof(MYTYPE),
                                                    item, local1Count, 0, 2,
                                                    sizeof(MYTYPE)));
     EXPECT_NO_THROW(my_fam->fam_quiet());
     EXPECT_EQ(local2[0], local1[0]);
     for (i = 1; i < local1Count + 1; i++)
         EXPECT_EQ(local2[i], local1[i - 1]);
-    EXPECT_NO_THROW(my_fam->fam_scatter_nonblocking(fbLocal2, 0,
-                                                    item, local1Count, 0, 2,
+    EXPECT_NO_THROW(my_fam->fam_scatter_nonblocking(fbLocal2, sizeof(MYTYPE),
+                                                    item, local1Count, 1, 2,
                                                     sizeof(MYTYPE)));
     EXPECT_NO_THROW(my_fam->fam_quiet());
     EXPECT_NO_THROW(my_fam->fam_get_blocking(fbLocal2, 0, item, 0, local2Size));
