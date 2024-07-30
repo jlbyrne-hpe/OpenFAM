@@ -429,6 +429,8 @@ void Fam_Memory_Service_Direct::copy(
     // This function is used only in memory server model
     if (isSharedMemory)
         return;
+
+    cout << __func__  << " " << destOffset << endl;
     Fam_Context *famCtx = famOps->get_defaultCtx(uint64_t(0));
 
     std::vector<fi_addr_t> *fiAddr = famOps->get_fiAddrs();
@@ -467,7 +469,12 @@ void Fam_Memory_Service_Direct::copy(
             if (memory_server_id == srcMemserverIds[0]) {
                 void *srcLocalAddr = allocator->get_local_pointer(
                     srcRegionId, srcOffsets[0] + currentSrcOffset);
-                memcpy(local, srcLocalAddr, localBufferSize);
+		cout << __func__ << "," << __LINE__ << ":" <<
+		  srcMemserverIds[0] << " " <<
+		  currentLocalPtr - (uintptr_t)local + destOffset << " " <<
+		  srcOffsets[0] + currentSrcOffset << " " << srcKeys[0] <<
+		  " " << localBufferSize << endl;
+                memcpy((void *)currentLocalPtr, srcLocalAddr, localBufferSize);
             } else {
                 // Issue an IO
                 fam_local_buffer_info localBuf = {
@@ -475,6 +482,11 @@ void Fam_Memory_Service_Direct::copy(
                     .len = localBufferSize,
                     .desc = NULL
                 };
+		cout << __func__ << "," << __LINE__ << ":" <<
+		  srcMemserverIds[0] << " " <<
+		  currentLocalPtr - (uintptr_t)local + destOffset << " " <<
+		  srcBaseAddrList[0] + currentSrcOffset << " " << srcKeys[0] <<
+		  " " << localBufferSize << endl;
                 fi_context *ctx = fabric_read(
                     srcKeys[0], &localBuf, localBufferSize,
                     (uint64_t)(srcBaseAddrList[0]) + currentSrcOffset,
@@ -522,6 +534,13 @@ void Fam_Memory_Service_Direct::copy(
                 void *srcLocalAddr = allocator->get_local_pointer(
                     srcRegionId, srcOffsets[currentSrcServerIndex] +
                                      currentSrcFamPtr + srcDisplacement);
+		cout << __func__ << "," << __LINE__ << ":" <<
+		  srcMemserverIds[currentSrcServerIndex] << " " <<
+		  currentLocalPtr - (uintptr_t)local + destOffset << " " <<
+		  (srcOffsets[currentSrcServerIndex] + currentSrcFamPtr +
+		   srcDisplacement) <<
+		  " " << srcKeys[currentSrcServerIndex] << " " << chunkSize <<
+		  endl;
                 memcpy((void *)currentLocalPtr, srcLocalAddr, chunkSize);
             } else {
                 fam_local_buffer_info localBuf = {
@@ -530,6 +549,13 @@ void Fam_Memory_Service_Direct::copy(
                     .desc = NULL
                 };
                 // Issue an IO
+		cout << __func__ << "," << __LINE__ << ":" <<
+		  srcMemserverIds[currentSrcServerIndex] << " " <<
+		  currentLocalPtr - (uintptr_t)local + destOffset << " " <<
+		  (srcBaseAddrList[currentSrcServerIndex] + currentSrcFamPtr +
+		   srcDisplacement) <<
+		  " " << srcKeys[currentSrcServerIndex] <<
+		  " " << localBufferSize << endl;
                 fi_context *ctx = fabric_read(
                     srcKeys[currentSrcServerIndex], &localBuf, chunkSize,
                     (uint64_t)(srcBaseAddrList[currentSrcServerIndex]) +
@@ -568,6 +594,12 @@ void Fam_Memory_Service_Direct::copy(
                 void *srcLocalAddr = allocator->get_local_pointer(
                     srcRegionId,
                     srcOffsets[currentSrcServerIndex] + currentSrcFamPtr);
+		cout << __func__ << "," << __LINE__ << ":" <<
+		  srcMemserverIds[currentSrcServerIndex] << " " <<
+		  currentLocalPtr - (uintptr_t)local + destOffset << " " <<
+		  srcOffsets[currentSrcServerIndex] + currentSrcFamPtr <<
+		  " " << srcKeys[currentSrcServerIndex] << " "<< chunkSize <<
+		  endl;
                 memcpy((void *)currentLocalPtr, srcLocalAddr, chunkSize);
             } else {
                 // Issue an IO
@@ -576,6 +608,12 @@ void Fam_Memory_Service_Direct::copy(
                     .len = chunkSize,
                     .desc = NULL
                 };
+		cout << __func__ << "," << __LINE__ << ":" <<
+		  srcMemserverIds[currentSrcServerIndex] << " " <<
+		  currentLocalPtr - (uintptr_t)local + destOffset << " " <<
+		  srcBaseAddrList[currentSrcServerIndex] + currentSrcFamPtr <<
+		  " " << srcKeys[currentSrcServerIndex] <<
+		  " " << localBufferSize << endl;
                 fi_context *ctx = fabric_read(
                     srcKeys[currentSrcServerIndex], &localBuf, chunkSize,
                     (uint64_t)(srcBaseAddrList[currentSrcServerIndex]) +

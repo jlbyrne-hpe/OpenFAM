@@ -777,6 +777,8 @@ int fabric_completion_wait(Fam_Context *famCtx, fi_context *fiCtx, int ioType) {
 int fabric_write(uint64_t key, fam_local_buffer_info *localBuf, size_t nbytes,
                  uint64_t offset, fi_addr_t fiAddr, Fam_Context *famCtx) {
 
+    cout << __func__ << "," << __LINE__ << ":" << fiAddr << " " << offset <<
+        " " << key << " "  << nbytes << endl;
     struct iovec iov = {
         .iov_base = (void *)localBuf->start,
         .iov_len = nbytes,
@@ -845,6 +847,9 @@ int fabric_write(uint64_t key, fam_local_buffer_info *localBuf, size_t nbytes,
 int fabric_read(uint64_t key, fam_local_buffer_info *localBuf, size_t nbytes,
 		uint64_t offset, fi_addr_t fiAddr, Fam_Context *famCtx) {
 
+
+    cout << __func__ << "," << __LINE__ << ":" << fiAddr << " " << offset <<
+        " " << key << " "  << nbytes << endl;
     struct iovec iov = {
         .iov_base = (void *)localBuf->start,
         .iov_len = localBuf->len,
@@ -1064,6 +1069,8 @@ fabric_write(uint64_t key, fam_local_buffer_info *localBuf,
 	     size_t nbytes, uint64_t offset, fi_addr_t fiAddr,
 	     Fam_Context *famCtx, bool block) {
 
+    cout << __func__ << "," << __LINE__ << ":" << fiAddr << " " << offset <<
+        " " << key << " "  << nbytes << endl;
     struct iovec iov = {
         .iov_base = (void *)localBuf->start,
         .iov_len = nbytes,
@@ -1144,6 +1151,8 @@ struct fi_context *fabric_read(uint64_t key, fam_local_buffer_info *localBuf,
                                size_t nbytes, uint64_t offset, fi_addr_t fiAddr,
                                Fam_Context *famCtx, bool block) {
 
+    cout << __func__ << "," << __LINE__ << ":" << fiAddr << " " << offset <<
+        " " << key << " "  << nbytes << endl;
     struct iovec iov = {
         .iov_base = (void *)localBuf->start,
         .iov_len = nbytes,
@@ -1444,7 +1453,6 @@ void fabric_put_quiet(Fam_Context *famCtx) {
     uint64_t txsuccess = 0;
     uint64_t txfail = 0;
     uint64_t txcnt = 0;
-    struct fi_cq_data_entry entry;
     ssize_t ret = 0;
     uint64_t txLastFailCnt = famCtx->get_num_tx_fail_cnt();
     int timeout_wait_retry_cnt = 0;
@@ -1455,24 +1463,20 @@ void fabric_put_quiet(Fam_Context *famCtx) {
         FI_CALL(txfail, fi_cntr_readerr, famCtx->get_txCntr());
         // New failure seen; Wait for cq_read and throw exception
         if (txfail > txLastFailCnt) {
-            do {
-                memset(&entry, 0, sizeof(entry));
-                FI_CALL(ret, fi_cq_sread, famCtx->get_txcq(), &entry, 1, NULL,
-                        FABRIC_TIMEOUT);
-                if (ret < 0 && (ret != -FI_EAGAIN) && (ret != -FI_ETIMEDOUT)) {
-                    // Flush all the errors from completion queue
-                    struct fi_cq_err_entry err;
-                    FI_CALL_NO_RETURN(fi_cq_readerr, famCtx->get_txcq(), &err,
-                                      0);
-                    const char *errmsg =
-                        fi_cq_strerror(famCtx->get_txcq(), err.prov_errno,
-                                       err.err_data, NULL, 0);
-                    famCtx->inc_num_tx_fail_cnt(txfail - txLastFailCnt);
-                    THROW_ERRNO_MSG(Fam_Datapath_Exception,
-                                    get_fam_error(err.err), errmsg);
-                }
-            } while (ret < 0 &&
-                     ((ret == -FI_EAGAIN) || (ret == -FI_ETIMEDOUT)));
+            struct fi_cq_data_entry entry;
+            memset(&entry, 0, sizeof(entry));
+            FI_CALL(ret, fi_cq_read, famCtx->get_txcq(), &entry, 1);
+            if (ret < 0 && ret != -FI_EAGAIN) {
+                // Flush all the errors from completion queue
+                struct fi_cq_err_entry err;
+                FI_CALL_NO_RETURN(fi_cq_readerr, famCtx->get_txcq(), &err, 0);
+                const char *errmsg =
+                    fi_cq_strerror(famCtx->get_txcq(), err.prov_errno,
+                                   err.err_data, NULL, 0);
+                famCtx->inc_num_tx_fail_cnt(txfail - txLastFailCnt);
+                THROW_ERRNO_MSG(Fam_Datapath_Exception,
+                                get_fam_error(err.err), errmsg);
+            }
         }
 
         if (timeout_retry_cnt < TIMEOUT_RETRY) {
@@ -1496,7 +1500,6 @@ void fabric_get_quiet(Fam_Context *famCtx) {
     uint64_t rxsuccess = 0;
     uint64_t rxfail = 0;
     uint64_t rxcnt = 0;
-    struct fi_cq_data_entry entry;
     ssize_t ret = 0;
     uint64_t rxLastFailCnt = famCtx->get_num_rx_fail_cnt();
     int timeout_wait_retry_cnt = 0;
@@ -1508,24 +1511,20 @@ void fabric_get_quiet(Fam_Context *famCtx) {
 
         // New failure seen; Wait for cq_read and throw exception
         if (rxfail > rxLastFailCnt) {
-            do {
-                memset(&entry, 0, sizeof(entry));
-                FI_CALL(ret, fi_cq_sread, famCtx->get_txcq(), &entry, 1, NULL,
-                        FABRIC_TIMEOUT);
-                if (ret < 0 && (ret != -FI_EAGAIN) && (ret != -FI_ETIMEDOUT)) {
-                    // Flush all the errors from completion queue
-                    struct fi_cq_err_entry err;
-                    FI_CALL_NO_RETURN(fi_cq_readerr, famCtx->get_txcq(), &err,
-                                      0);
-                    const char *errmsg =
-                        fi_cq_strerror(famCtx->get_txcq(), err.prov_errno,
-                                       err.err_data, NULL, 0);
-                    famCtx->inc_num_rx_fail_cnt(rxfail - rxLastFailCnt);
-                    THROW_ERRNO_MSG(Fam_Datapath_Exception,
-                                    get_fam_error(err.err), errmsg);
-                }
-            } while (ret < 0 &&
-                     ((ret == -FI_EAGAIN) || (ret == -FI_ETIMEDOUT)));
+            struct fi_cq_data_entry entry;
+            memset(&entry, 0, sizeof(entry));
+            FI_CALL(ret, fi_cq_read, famCtx->get_txcq(), &entry, 1);
+            if (ret < 0 && ret != -FI_EAGAIN) {
+                // Flush all the errors from completion queue
+                struct fi_cq_err_entry err;
+                FI_CALL_NO_RETURN(fi_cq_readerr, famCtx->get_txcq(), &err, 0);
+                const char *errmsg =
+                    fi_cq_strerror(famCtx->get_txcq(), err.prov_errno,
+                                   err.err_data, NULL, 0);
+                famCtx->inc_num_rx_fail_cnt(rxfail - rxLastFailCnt);
+                THROW_ERRNO_MSG(Fam_Datapath_Exception,
+                                get_fam_error(err.err), errmsg);
+            }
         }
 
         if (timeout_retry_cnt < TIMEOUT_RETRY) {

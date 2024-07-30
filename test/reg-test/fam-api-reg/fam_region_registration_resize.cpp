@@ -86,7 +86,7 @@ void *thr_func1(void *arg) {
             Fam_Exception);
 
         char *local = (char *)malloc(4294967296);
-        memset(local, 0, 4294967296);
+        memset(local, 1, 4294967296);
 
         // Write operation on already validated descriptor
         EXPECT_NO_THROW(my_fam->fam_put_blocking(local, item1, 0, 4294967296));
@@ -100,7 +100,7 @@ void *thr_func1(void *arg) {
         char *local2 = (char *)malloc(4294967296);
 
         EXPECT_NO_THROW(my_fam->fam_get_blocking(local2, item1, 0, 4294967296));
-        EXPECT_STREQ(local, local2);
+        EXPECT_TRUE(!memcmp(local, local2, 4294967296));
 
         // Resize the region
         EXPECT_NO_THROW(my_fam->fam_resize_region(desc, 17179869184));
@@ -127,7 +127,7 @@ void *thr_func1(void *arg) {
             Fam_Exception);
 
         char *local = (char *)malloc(4294967296);
-        memset(local, 0, 4294967296);
+        memset(local, 2, 4294967296);
 
         // Write operation on already validated descriptor
         EXPECT_NO_THROW(my_fam->fam_put_blocking(local, item2, 0, 4294967296));
@@ -141,7 +141,7 @@ void *thr_func1(void *arg) {
         char *local3 = (char *)malloc(4294967296);
 
         EXPECT_NO_THROW(my_fam->fam_get_blocking(local3, item2, 0, 4294967296));
-        EXPECT_STREQ(local, local3);
+        EXPECT_TRUE(!memcmp(local, local3, 4294967296));
 
         // Resize the region second time
         EXPECT_NO_THROW(my_fam->fam_resize_region(desc, 34359738368));
@@ -160,7 +160,7 @@ void *thr_func1(void *arg) {
         EXPECT_NE((void *)NULL, item3);
 
         char *local = (char *)malloc(6442450944);
-        memset(local, 0, 6442450944);
+        memset(local, 3, 6442450944);
         // Write operation on already validated descriptor
         EXPECT_NO_THROW(my_fam->fam_put_blocking(local, item3, 0, 6442450944));
 
@@ -173,7 +173,7 @@ void *thr_func1(void *arg) {
         char *local3 = (char *)malloc(6442450944);
 
         EXPECT_NO_THROW(my_fam->fam_get_blocking(local3, item3, 0, 6442450944));
-        EXPECT_STREQ(local, local3);
+        EXPECT_TRUE(!memcmp(local, local3, 6442450944));
 
         free(local);
         free(local3);

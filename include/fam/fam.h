@@ -73,7 +73,7 @@
 #include <sys/stat.h> // needed for mode_t
 
 #ifdef __cplusplus
-#include <memory>
+//#include <memory>
 
 namespace openfam {
 extern "C" {

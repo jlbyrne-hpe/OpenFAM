@@ -264,7 +264,7 @@ int main(int argc, char **argv) {
     my_fam = new fam();
 
     init_fam_options(&fam_opts);
-
+    fam_opts.famThreadModel = strdup("FAM_THREAD_MULTIPLE");
     EXPECT_NO_THROW(my_fam->fam_initialize("default", &fam_opts));
 
     testRegionStr = get_uniq_str("test", my_fam);

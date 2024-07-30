@@ -1396,7 +1396,7 @@ void Fam_CIS_Direct::deallocate(uint64_t regionId, uint64_t offset,
             resultList.push_back(result.share());
         }
 
-    // Wait for region destroy to complete.
+    // Wait for deallocate to complete.
     try {
         for (auto result : resultList) {
             result.get();
@@ -1911,7 +1911,7 @@ void *Fam_CIS_Direct::copy(uint64_t srcRegionId, uint64_t srcOffset,
             srcCopyStart += (destDataitem.interleaveSize - additionalOffset);
         }
 
-        // Wait for region destroy to complete.
+        // Wait for copy to complete.
         try {
             for (auto result : resultList) {
                 result.get();
@@ -2045,7 +2045,7 @@ void *Fam_CIS_Direct::backup(uint64_t srcRegionId, uint64_t srcOffset,
             writeMetadata = false;
         }
 
-        // Wait for region destroy to complete.
+        // Wait for backup to complete.
         try {
             for (auto result : resultList) {
                 result.get();
@@ -2162,7 +2162,7 @@ void *Fam_CIS_Direct::restore(uint64_t destRegionId, uint64_t destOffset,
             resultList.push_back(result.share());
         }
 
-        // Wait for region destroy to complete.
+        // Wait for restore to complete.
         try {
             for (auto result : resultList) {
                 result.get();
