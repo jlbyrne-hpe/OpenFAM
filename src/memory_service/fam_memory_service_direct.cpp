@@ -418,194 +418,227 @@ void *Fam_Memory_Service_Direct::get_local_pointer(uint64_t regionId,
     return base;
 }
 
+struct FamCopyData {
+    std::vector<struct fi_context *> fiCtxVector;
+    Fam_Context *famCtx;
+    std::vector<fi_addr_t> *fiAddr;
+    uint64_t srcRegionId;
+    uint64_t srcCurrentOffset;
+    uint64_t srcCurrentSrvIndex;
+    uint64_t srcCopyEnd;
+    uint64_t srcMemsrvCnt;
+    uint64_t *srcOffsets;
+    uint64_t *srcKeys;
+    uint64_t *srcBaseAddrList;
+    uint64_t *srcMemsrvIds;
+    uint64_t srcInterleaveSize;
+    uint64_t srcSrvInterleaveSize;
+    uint64_t destFamOffset;
+    uint64_t destInterleaveSize;
+    uint64_t destSrvInterleaveSize;
+    uintptr_t destLocalStart;
+    uintptr_t destCurrentAddr;
+    uint64_t thisServer;
+    Memserver_Allocator *thisAllocator;
+};
+
+// Transfer bytes within a one source item interleave block.
+// It is assumed that any crossing of source interleave blocks is handled
+// in copy_src_data() before calling copy_src_data_1() and that any crossing
+// of crossing destination interleave blocks is handled before copy_src_data()
+// is called.
+
+static void copy_src_data_1(FamCopyData &data, uint64_t xferBytes,
+                            uint64_t srcOffsetInBlock) {
+
+    uint64_t srcMemsrvId = data.srcMemsrvIds[data.srcCurrentSrvIndex];
+    uint64_t srcFamInterleaveOffset =
+        (((data.srcCurrentOffset / data.srcSrvInterleaveSize) *
+          data.srcInterleaveSize) + srcOffsetInBlock);
+
+    // On the same memory server?
+    if (data.thisServer == srcMemsrvId) {
+        // Yes: use memcpy()
+        uint64_t srcFamOffset = (data.srcOffsets[data.srcCurrentSrvIndex] +
+                                 srcFamInterleaveOffset);
+        void *srcAddr =
+            data.thisAllocator->get_local_pointer(data.srcRegionId,
+                                                  srcFamOffset);
+        /*
+        cout << __func__ << "," << __LINE__ << ":" <<
+            srcMemsrvId << " " <<
+            data.destCurrentAddr - data.destLocalStart + data.destFamOffset <<
+            " " << data.srcCurrentOffset << " " << srcFamOffset << " " <<
+            data.srcKeys[data.srcCurrentSrvIndex] << " " << xferBytes << endl;
+        */
+        memcpy((void *)data.destCurrentAddr, srcAddr, xferBytes);
+    } else {
+        // No: use fabric_read()
+        uint64_t remoteOffset = (data.srcBaseAddrList[data.srcCurrentSrvIndex] +
+                                 srcFamInterleaveOffset);
+	/*
+        cout << __func__ << "," << __LINE__ << ":" <<
+            srcMemsrvId << " " <<
+            data.destCurrentAddr - data.destLocalStart + data.destFamOffset <<
+            " " << data.srcCurrentOffset << " " << remoteOffset << " "  <<
+            data.srcKeys[data.srcCurrentSrvIndex] << " " << xferBytes << endl;
+	*/
+        fi_context *ctx;
+	ctx = fabric_read(data.srcKeys[data.srcCurrentSrvIndex],
+			  (void *)data.destCurrentAddr, xferBytes, remoteOffset,
+			  (*data.fiAddr)[srcMemsrvId], data.famCtx, true);
+        // store the fi_context pointer to ensure the completion latter.
+        data.fiCtxVector.push_back(ctx);
+    }
+
+    // Advance buffers
+    data.destCurrentAddr += xferBytes;
+    data.srcCurrentOffset += xferBytes;
+    data.srcCurrentSrvIndex += 1;
+    if (data.srcCurrentSrvIndex == data.srcMemsrvCnt)
+        data.srcCurrentSrvIndex = 0;
+}
+
+static uint64_t copy_check_src_xfer(FamCopyData &data, uint64_t xferBytes) {
+
+    // Done?
+    if (data.srcCurrentOffset >= data.srcCopyEnd)
+        return 0;
+
+    // Are we in the last source block?
+    uint64_t srcBytes = data.srcCopyEnd - data.srcCurrentOffset;
+    if (srcBytes <= data.srcInterleaveSize) {
+        // Yes: then srcBytes limits the transfer
+        return min(xferBytes, srcBytes);
+    }
+
+    return xferBytes;
+}
+
+static bool copy_src_data(FamCopyData &data, uint64_t maxBytes) {
+
+    uint64_t srcOffsetInBlock = data.srcCurrentOffset % data.srcInterleaveSize;
+    uint64_t xferBytes;
+
+    data.srcCurrentSrvIndex =
+        (data.srcCurrentOffset / data.srcInterleaveSize) % data.srcMemsrvCnt;
+
+    // Does the source start in the middle of a source interleave block?
+    if (srcOffsetInBlock > 0) {
+        // Yes: transfer partial source block to align the rest
+        xferBytes = min(maxBytes, data.srcInterleaveSize - srcOffsetInBlock);
+        // End of copy checks.
+        xferBytes = copy_check_src_xfer(data, xferBytes);
+        if (!xferBytes)
+            return true;
+        copy_src_data_1(data, xferBytes, srcOffsetInBlock);
+        maxBytes -= xferBytes;
+    }
+
+    // Transfer the rest of the data from source interleave aligned blocks
+    for (; maxBytes > 0; maxBytes -= xferBytes) {
+        // Transfer a maximum of 1 source interleave block per loop,
+        // limited by maxBytes.
+        xferBytes = min(maxBytes, data.srcInterleaveSize);
+        // End of copy checks.
+        xferBytes = copy_check_src_xfer(data, xferBytes);
+        if (!xferBytes)
+            return true;
+        copy_src_data_1(data, xferBytes, 0);
+    }
+
+    // Advance source for next destination interleave block on this server.
+    // If the copy is done, it will be found on the next call.
+    data.srcCurrentOffset +=
+      data.destSrvInterleaveSize - data.destInterleaveSize;
+
+    return false;
+}
+
+static void copy_io_wait(FamCopyData &data, size_t minLimit,
+                         size_t loop, size_t progress) {
+
+    size_t outstanding = data.fiCtxVector.size();
+    if (outstanding < minLimit) {
+        if (outstanding > 0 && loop % progress == 0) {
+            if (fabric_progress(data.famCtx) < outstanding)
+                return;
+        } else
+            return;
+    }
+
+    data.famCtx->acquire_RDLock();
+    for (auto ctx : data.fiCtxVector) {
+        try {
+            fabric_completion_wait(data.famCtx, ctx, 0);
+        } catch (Fam_Exception &e) {
+            data.famCtx->inc_num_rx_fail_cnt(1l);
+            // Release Fam_Context read lock
+            data.famCtx->release_lock();
+            throw e;
+        }
+    }
+    data.famCtx->release_lock();
+}
+
 void Fam_Memory_Service_Direct::copy(
-    uint64_t srcRegionId, uint64_t *srcOffsets, uint64_t srcUsedMemsrvCnt,
+    uint64_t srcRegionId, uint64_t *srcOffsets, uint64_t srcMemsrvCnt,
     uint64_t srcCopyStart, uint64_t srcCopyEnd, uint64_t *srcKeys,
-    uint64_t *srcBaseAddrList, uint64_t destRegionId, uint64_t destOffset,
-    uint64_t destUsedMemsrvCnt, uint64_t *srcMemserverIds,
+    uint64_t *srcBaseAddrList, uint64_t destRegionId, uint64_t destFamOffset,
+    uint64_t destMemsrvCnt, uint64_t *srcMemsrvIds,
     uint64_t srcInterleaveSize, uint64_t destInterleaveSize, uint64_t size) {
     MEMORY_SERVICE_DIRECT_PROFILE_START_OPS()
 
     // This function is used only in memory server model
     if (isSharedMemory)
         return;
-    Fam_Context *famCtx = famOps->get_defaultCtx(uint64_t(0));
 
-    std::vector<fi_addr_t> *fiAddr = famOps->get_fiAddrs();
-    uint64_t destDisplacement = destOffset % destInterleaveSize;
     // Get the local pointer to destination FAM offset
-    void *local = allocator->get_local_pointer(destRegionId, destOffset);
-    uint64_t currentSrcOffset = srcCopyStart;
-    // Vector to store fi_context pointer of each IO
-    std::vector<struct fi_context *> fiCtxVector;
-    uint64_t currentLocalPtr = (uint64_t)local;
-    uint64_t localBufferSize;
-    // Copy data to consecutive blocks till the end of the byte that needs to be
-    // copied is reached
-    while (currentSrcOffset < srcCopyEnd) {
-        // If destination dataitem is present in only one memory server, the
-        // local buffer size offered for copy should be equal to the total bytes
-        // that needs to be copied, else if it is distributed across more than
-        // one memory server the size of local buffer can be destination
-        // dataitem inetreleave size or less than that based on the offset at
-        // which data needs to be copied
-        if (destUsedMemsrvCnt == 1) {
-            localBufferSize = size;
-        } else if (destDisplacement) {
-            localBufferSize = destInterleaveSize - destDisplacement;
-        } else {
-            localBufferSize = destInterleaveSize;
-        }
-        // Check if the source dataitem is spread across more than one memory
-        // server, if spread across multiple servers calculate the index of
-        // first server, first block and the displacement within the block, else
-        // issue a single IO to a memory server where that dataitem is located.
-        if (srcUsedMemsrvCnt == 1) {
-            // If both destination and source dataitems reside in same memory
-            // server use memcpy to copy the data else pull data from remote
-            // memory server
-            if (memory_server_id == srcMemserverIds[0]) {
-                void *srcLocalAddr = allocator->get_local_pointer(
-                    srcRegionId, srcOffsets[0] + currentSrcOffset);
-                memcpy(local, srcLocalAddr, localBufferSize);
-            } else {
-                // Issue an IO
-                fi_context *ctx = fabric_read(
-                    srcKeys[0], (void *)currentLocalPtr, localBufferSize,
-                    (uint64_t)(srcBaseAddrList[0]) + currentSrcOffset,
-                    (*fiAddr)[srcMemserverIds[0]], famCtx, true);
-                // store the fi_context pointer to ensure the completion latter.
-                fiCtxVector.push_back(ctx);
-            }
-            currentSrcOffset += (localBufferSize +
-                                 (destUsedMemsrvCnt - 1) * destInterleaveSize);
-            currentLocalPtr += localBufferSize;
-            destDisplacement = 0;
-            continue;
-        }
+    void *local = allocator->get_local_pointer(destRegionId, destFamOffset);
 
-        // Current src memory server id index
-        uint64_t currentSrcServerIndex =
-            ((currentSrcOffset / srcInterleaveSize) % srcUsedMemsrvCnt);
-        // Current remote location in FAM
-        uint64_t currentSrcFamPtr =
-            (((currentSrcOffset / srcInterleaveSize) - currentSrcServerIndex) /
-             srcUsedMemsrvCnt) *
-            srcInterleaveSize;
-        // Current Local pointer position
-        // uint64_t currentLocalPtr = (uint64_t)local;
-        // Displacement from the starting position of the interleave block
-        uint64_t srcDisplacement = currentSrcOffset % srcInterleaveSize;
+    // Fill in a data structure to make the rest easier
+    FamCopyData data = {
+        .fiCtxVector = {},
+        .famCtx = famOps->get_defaultCtx(FAM_DEFAULT_CTX_ID),
+        .fiAddr = famOps->get_fiAddrs(),
+        .srcRegionId = srcRegionId,
+        .srcCurrentOffset = srcCopyStart,
+        .srcCurrentSrvIndex = 0,                // needs an initializer
+        .srcCopyEnd = srcCopyEnd,
+        .srcMemsrvCnt = srcMemsrvCnt,
+        .srcOffsets = srcOffsets,
+        .srcKeys = srcKeys,
+        .srcBaseAddrList = srcBaseAddrList,
+        .srcMemsrvIds = srcMemsrvIds,
+        .srcInterleaveSize = srcInterleaveSize,
+        .srcSrvInterleaveSize = srcInterleaveSize * srcMemsrvCnt,
+        .destFamOffset = destFamOffset,
+        .destInterleaveSize = destInterleaveSize,
+        .destSrvInterleaveSize = destInterleaveSize * destMemsrvCnt,
+        .destLocalStart = (uintptr_t)local,
+        .destCurrentAddr = (uintptr_t)local,
+        .thisServer = memory_server_id,
+        .thisAllocator = allocator,
+    };
 
-        uint64_t chunkSize;
-        uint64_t nBytesRead = 0;
-        /*
-         * If the offset is displaced from a starting position of a block
-         * issue a seperate IO for that chunk of data
-         */
-        uint64_t firstBlockSize = srcInterleaveSize - srcDisplacement;
-        if (firstBlockSize < srcInterleaveSize) {
-            // Calculate the chunk of size for each IO
-            if (localBufferSize < firstBlockSize)
-                chunkSize = localBufferSize;
-            else
-                chunkSize = firstBlockSize;
-            // If both destination and source dataitems reside in same memory
-            // server use memcpy to copy the data else pull data from remote
-            // memory server
-            if (memory_server_id == srcMemserverIds[currentSrcServerIndex]) {
-                void *srcLocalAddr = allocator->get_local_pointer(
-                    srcRegionId, srcOffsets[currentSrcServerIndex] +
-                                     currentSrcFamPtr + srcDisplacement);
-                memcpy((void *)currentLocalPtr, srcLocalAddr, chunkSize);
-            } else {
-                // Issue an IO
-                fi_context *ctx = fabric_read(
-                    srcKeys[currentSrcServerIndex], (void *)currentLocalPtr,
-                    chunkSize,
-                    (uint64_t)(srcBaseAddrList[currentSrcServerIndex]) +
-                        currentSrcFamPtr + srcDisplacement,
-                    (*fiAddr)[srcMemserverIds[currentSrcServerIndex]], famCtx,
-                    true);
-                // store the fi_context pointer to ensure the completion latter.
-                fiCtxVector.push_back(ctx);
-            }
-            // go to next server for next block of data
-            currentSrcServerIndex++;
-            // If last memory server is reached roll back to first server and
-            // incement the interleave block by one
-            if (currentSrcServerIndex == srcUsedMemsrvCnt) {
-                currentSrcServerIndex = 0;
-                // Increment a block everytime cricles through used servers.
-                currentSrcFamPtr += srcInterleaveSize;
-            }
-            // Increment the number of bytes written
-            nBytesRead += chunkSize;
-            // Increment the local buffer pointer by number of bytes written
-            currentLocalPtr += chunkSize;
-        }
-        // Loop until the requested number of bytes are issued through IO
-        while (nBytesRead < localBufferSize) {
-            // Calculate the chunk of size for each IO
-            //(For last IO the chunk size may not be same as inetrleave size)
-            if ((localBufferSize - nBytesRead) < srcInterleaveSize)
-                chunkSize = localBufferSize - nBytesRead;
-            else
-                chunkSize = srcInterleaveSize;
-            // If both destination and source dataitems reside in same memory
-            // server use memcpy to copy the data else pull data from remote
-            // memory server
-            if (memory_server_id == srcMemserverIds[currentSrcServerIndex]) {
-                void *srcLocalAddr = allocator->get_local_pointer(
-                    srcRegionId,
-                    srcOffsets[currentSrcServerIndex] + currentSrcFamPtr);
-                memcpy((void *)currentLocalPtr, srcLocalAddr, chunkSize);
-            } else {
-                // Issue an IO
-                fi_context *ctx = fabric_read(
-                    srcKeys[currentSrcServerIndex], (void *)currentLocalPtr,
-                    chunkSize,
-                    (uint64_t)(srcBaseAddrList[currentSrcServerIndex]) +
-                        currentSrcFamPtr,
-                    (*fiAddr)[srcMemserverIds[currentSrcServerIndex]], famCtx,
-                    true);
-                // store the fi_context pointer to ensure the completion latter.
-                fiCtxVector.push_back(ctx);
-            }
-            // go to next server for next block of data
-            currentSrcServerIndex++;
-            // If last memory server is reached roll back to first server and
-            // incement the interleave block by one
-            if (currentSrcServerIndex == srcUsedMemsrvCnt) {
-                currentSrcServerIndex = 0;
-                currentSrcFamPtr += srcInterleaveSize;
-            }
-            // Increment the number of bytes written
-            currentLocalPtr += chunkSize;
-            // Increment the local buffer pointer by number of bytes written
-            nBytesRead += chunkSize;
-        }
-        currentSrcOffset +=
-            (localBufferSize + (destUsedMemsrvCnt - 1) * destInterleaveSize);
-        destDisplacement = 0;
+    uint64_t destOffsetInBlock = destFamOffset % destInterleaveSize;
+
+    //  In middle of dest interleave block?
+    if (destOffsetInBlock > 0) {
+        // Yes: transfer partial block to align the rest
+        (void)copy_src_data(data, destInterleaveSize - destOffsetInBlock);
     }
-    /*
-     * Iterate over the vector of fi_context to ensure the completion of all IOs
-     */
-    if (!fiCtxVector.empty()) {
-        famCtx->acquire_RDLock();
-        for (auto ctx : fiCtxVector) {
-            try {
-                fabric_completion_wait(famCtx, ctx, 0);
-            } catch (Fam_Exception &e) {
-                famCtx->inc_num_rx_fail_cnt(1l);
-                // Release Fam_Context read lock
-                famCtx->release_lock();
-                throw e;
-            }
-        }
-        famCtx->release_lock();
+
+    // Transfer the rest of the data to dest interleave aligned blocks
+    for (uint64_t i = 1;;) {
+        // Transfer a maximum of 1 dest interleave block per loop.
+        if (copy_src_data(data, destInterleaveSize))
+            break;
+        // Limit to 100 I/Os outstanding, progress every 10
+        copy_io_wait(data, 100, i, 10);
     }
+    // Wait for any outstanding I/Os.
+    copy_io_wait(data, 0, 0, 0);
 
     MEMORY_SERVICE_DIRECT_PROFILE_END_OPS(mem_direct_copy);
 }

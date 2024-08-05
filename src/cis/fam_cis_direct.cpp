@@ -1396,7 +1396,7 @@ void Fam_CIS_Direct::deallocate(uint64_t regionId, uint64_t offset,
             resultList.push_back(result.share());
         }
 
-    // Wait for region destroy to complete.
+    // Wait for deallocate to complete.
     try {
         for (auto result : resultList) {
             result.get();
@@ -1873,28 +1873,23 @@ void *Fam_CIS_Direct::copy(uint64_t srcRegionId, uint64_t srcOffset,
         waitObj->tag = tag;
     } else {
         uint64_t srcCopyEnd = srcCopyStart + size;
+        uint64_t srcInterleaveSize =
+            (srcDataitem.used_memsrv_cnt == 1 ? srcDataitem.size :
+             srcDataitem.interleaveSize);
+        uint64_t destInterleaveSize =
+            (destDataitem.used_memsrv_cnt == 1 ? destDataitem.size :
+             destDataitem.interleaveSize);
         uint64_t destStartServerIdx =
-            (destDataitem.used_memsrv_cnt == 1)
-                ? 0
-                : (destCopyStart / destDataitem.interleaveSize) %
-                      destDataitem.used_memsrv_cnt;
+            (destCopyStart / destInterleaveSize) % destDataitem.used_memsrv_cnt;
         uint64_t destFamPtr =
-            (destDataitem.used_memsrv_cnt == 1)
-                ? destCopyStart
-                : (((destCopyStart / destDataitem.interleaveSize) -
-                    destStartServerIdx) /
-                   destDataitem.used_memsrv_cnt) *
-                      destDataitem.interleaveSize;
-        uint64_t destDisplacement =
-            (destDataitem.used_memsrv_cnt == 1)
-                ? 0
-                : destCopyStart % destDataitem.interleaveSize;
+            ((destCopyStart /
+              (destInterleaveSize * destDataitem.used_memsrv_cnt)) *
+             destInterleaveSize);
+        uint64_t destDisplacement = destCopyStart % destInterleaveSize;
         std::list<std::shared_future<void>> resultList;
-        for (int i = 0; i < (int)destDataitem.used_memsrv_cnt; i++) {
-            int index = (i + (int)destStartServerIdx) %
-                        (int)destDataitem.used_memsrv_cnt;
-            uint64_t additionalOffset =
-                (index == (int)destStartServerIdx) ? destDisplacement : 0;
+        for (uint64_t i = 0; i < destDataitem.used_memsrv_cnt; i++) {
+            uint64_t index =
+                (i + destStartServerIdx) % destDataitem.used_memsrv_cnt;
             Fam_Memory_Service *memoryService =
                 get_memory_service(destDataitem.memoryServerIds[index]);
             std::future<void> result(std::async(
@@ -1902,16 +1897,17 @@ void *Fam_CIS_Direct::copy(uint64_t srcRegionId, uint64_t srcOffset,
                 memoryService, srcRegionId, srcDataitem.offsets,
                 srcDataitem.used_memsrv_cnt, srcCopyStart, srcCopyEnd, srcKeys,
                 srcBaseAddrList, destRegionId,
-                destDataitem.offsets[index] + destFamPtr + additionalOffset,
+                destDataitem.offsets[index] + destFamPtr + destDisplacement,
                 destDataitem.used_memsrv_cnt, srcDataitem.memoryServerIds,
-                srcDataitem.interleaveSize, destDataitem.interleaveSize, size));
+                srcInterleaveSize, destInterleaveSize, size));
             resultList.push_back(result.share());
-            if (index == (int)(destDataitem.used_memsrv_cnt - 1))
+            if (index == destDataitem.used_memsrv_cnt - 1)
                 destFamPtr += destDataitem.interleaveSize;
-            srcCopyStart += (destDataitem.interleaveSize - additionalOffset);
+            srcCopyStart += (destDataitem.interleaveSize - destDisplacement);
+            destDisplacement = 0;
         }
 
-        // Wait for region destroy to complete.
+        // Wait for copy to complete.
         try {
             for (auto result : resultList) {
                 result.get();
@@ -2045,7 +2041,7 @@ void *Fam_CIS_Direct::backup(uint64_t srcRegionId, uint64_t srcOffset,
             writeMetadata = false;
         }
 
-        // Wait for region destroy to complete.
+        // Wait for backup to complete.
         try {
             for (auto result : resultList) {
                 result.get();
@@ -2162,7 +2158,7 @@ void *Fam_CIS_Direct::restore(uint64_t destRegionId, uint64_t destOffset,
             resultList.push_back(result.share());
         }
 
-        // Wait for region destroy to complete.
+        // Wait for restore to complete.
         try {
             for (auto result : resultList) {
                 result.get();
