@@ -131,7 +131,7 @@ TEST(DataitemInterleaving, PutGetSuccess) {
     EXPECT_NO_THROW(
         my_fam->fam_get_blocking(local2, item, 8, 6 * INTERLEAVE_SIZE));
 
-    EXPECT_TRUE(!memcmp(local, local2, 6 * INTERLEAVE_SIZE));
+    EXPECT_EQ(0, memcmp(local, local2, 6 * INTERLEAVE_SIZE));
     EXPECT_NO_THROW(my_fam->fam_deallocate(item));
 
     EXPECT_NO_THROW(my_fam->fam_destroy_region(desc));
@@ -226,7 +226,7 @@ TEST(DataitemInterleaving, PutGetNonblockSuccess) {
 
     EXPECT_NO_THROW(my_fam->fam_quiet());
 
-    EXPECT_TRUE(!memcmp(local, local2, 6 * INTERLEAVE_SIZE));
+    EXPECT_EQ(0, memcmp(local, local2, 6 * INTERLEAVE_SIZE));
     EXPECT_NO_THROW(my_fam->fam_deallocate(item));
 
     EXPECT_NO_THROW(my_fam->fam_destroy_region(desc));
@@ -717,30 +717,27 @@ TEST(DataitemInterleaving, Copy) {
              << TEST_SKIP_STATUS << endl;
         GTEST_SKIP();
     }
-    cout << "fam_put " << endl;
     EXPECT_NO_THROW(
         my_fam->fam_put_blocking(local, srcItem, 4096, 6 * INTERLEAVE_SIZE));
 
     void *waitObj[ITERATION];
-    for (int i = 0; i < 1 /*ITERATION*/; i++) {
-        cout << "fam_copy " << i << endl;
+    for (int i = 0; i < ITERATION; i++) {
         EXPECT_NO_THROW(waitObj[i] =
                             my_fam->fam_copy(srcItem, 4096, destItem[i], 1024,
                                              6 * INTERLEAVE_SIZE));
         EXPECT_NE((void *)NULL, waitObj[i]);
     }
 
-    for (int i = 0 /*ITERATION - 1*/; i >= 0; i--) {
+    for (int i = ITERATION - 1; i >= 0; i--) {
         EXPECT_NO_THROW(my_fam->fam_copy_wait(waitObj[i]));
     }
 
     char *local2 = (char *)malloc(6 * INTERLEAVE_SIZE);
 
-    for (int i = 0; i < 1 /*ITERATION*/; i++) {
-        cout << "fam_get " << i << endl;
+    for (int i = 0; i < ITERATION; i++) {
         EXPECT_NO_THROW(my_fam->fam_get_blocking(local2, destItem[i], 1024,
                                                  6 * INTERLEAVE_SIZE));
-        EXPECT_TRUE(!memcmp(local, local2, 6 * INTERLEAVE_SIZE));
+        EXPECT_EQ(0, memcmp(local, local2, 6 * INTERLEAVE_SIZE));
     }
 
     EXPECT_NO_THROW(my_fam->fam_deallocate(srcItem));
@@ -939,8 +936,7 @@ TEST(DataitemInterleaving, RestoreSuccess) {
     EXPECT_NO_THROW(
         my_fam->fam_get_blocking(local2, item, 0, 6 * backupInterleaveSize));
 
-    EXPECT_TRUE(!memcmp(local, local2, 6 * backupInterleaveSize));
-    free(local);
+    EXPECT_EQ(0, memcmp(local, local2, 6 * backupInterleaveSize));
     free(local2);
 
     EXPECT_NO_THROW(my_fam->fam_deallocate(item));
@@ -1031,7 +1027,7 @@ TEST(DataitemInterleaving, CreateDataitemRestoreSuccess) {
     char *local2 = (char *)malloc(6 * backupInterleaveSize);
     EXPECT_NO_THROW(
         my_fam->fam_get_blocking(local2, item, 0, 6 * backupInterleaveSize));
-    EXPECT_TRUE(!memcmp(local, local2, 6 * backupInterleaveSize));
+    EXPECT_EQ(0, memcmp(local, local2, 6 * backupInterleaveSize));
     free(local);
     free(local2);
 
