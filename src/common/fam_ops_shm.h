@@ -77,57 +77,57 @@ class Fam_Ops_SHM : public Fam_Ops {
     size_t get_fabric_iov_limit() { return 0; }
 
     Fam_Context *get_context(Fam_Descriptor *descriptor);
-    int put_blocking(fam_local_buffer_info *localBuf,
+    int put_blocking(Fam_Local_Buffer_Info *localBuf,
 		     Fam_Descriptor *descriptor,
                      uint64_t offset, uint64_t nbytes);
 
-    int get_blocking(fam_local_buffer_info *localBuf,
+    int get_blocking(Fam_Local_Buffer_Info *localBuf,
 		     Fam_Descriptor *descriptor,
                      uint64_t offset, uint64_t nbytes);
 
-    int gather_blocking(fam_local_buffer_info *localBuf,
+    int gather_blocking(Fam_Local_Buffer_Info *localBuf,
 			Fam_Descriptor *descriptor,
                         uint64_t nElements, uint64_t firstElement,
                         uint64_t stride, uint64_t elementSize);
 
-    int gather_blocking(fam_local_buffer_info *localBuf,
+    int gather_blocking(Fam_Local_Buffer_Info *localBuf,
 			Fam_Descriptor *descriptor,
                         uint64_t nElements, uint64_t *elementIndex,
                         uint64_t elementSize);
 
-    int scatter_blocking(fam_local_buffer_info *localBuf,
+    int scatter_blocking(Fam_Local_Buffer_Info *localBuf,
 			 Fam_Descriptor *descriptor,
                          uint64_t nElements, uint64_t firstElement,
                          uint64_t stride, uint64_t elementSize);
 
-    int scatter_blocking(fam_local_buffer_info *localBuf,
+    int scatter_blocking(Fam_Local_Buffer_Info *localBuf,
 			 Fam_Descriptor *descriptor,
                          uint64_t nElements, uint64_t *elementIndex,
                          uint64_t elementSize);
-    void put_nonblocking(fam_local_buffer_info *localBuf,
+    void put_nonblocking(Fam_Local_Buffer_Info *localBuf,
 			 Fam_Descriptor *descriptor,
                          uint64_t offset, uint64_t nbytes);
 
-    void get_nonblocking(fam_local_buffer_info *localBuf,
+    void get_nonblocking(Fam_Local_Buffer_Info *localBuf,
 			 Fam_Descriptor *descriptor,
                          uint64_t offset, uint64_t nbytes);
 
-    void gather_nonblocking(fam_local_buffer_info *localBuf,
+    void gather_nonblocking(Fam_Local_Buffer_Info *localBuf,
                             Fam_Descriptor *descriptor,
                             uint64_t nElements, uint64_t firstElement,
                             uint64_t stride, uint64_t elementSize);
 
-    void gather_nonblocking(fam_local_buffer_info *localBuf,
+    void gather_nonblocking(Fam_Local_Buffer_Info *localBuf,
                             Fam_Descriptor *descriptor,
                             uint64_t nElements, uint64_t *elementIndex,
                             uint64_t elementSize);
 
-    void scatter_nonblocking(fam_local_buffer_info *localBuf,
+    void scatter_nonblocking(Fam_Local_Buffer_Info *localBuf,
                              Fam_Descriptor *descriptor,
                              uint64_t nElements, uint64_t firstElement,
                              uint64_t stride, uint64_t elementSize);
 
-    void scatter_nonblocking(fam_local_buffer_info *localBuf,
+    void scatter_nonblocking(Fam_Local_Buffer_Info *localBuf,
                              Fam_Descriptor *descriptor,
                              uint64_t nElements, uint64_t *elementIndex,
                              uint64_t elementSize);

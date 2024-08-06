@@ -455,7 +455,12 @@ void Fam_Memory_Service_Direct::copy(
     std::vector<struct fi_context *> fiCtxVector;
     uint64_t currentLocalPtr = (uint64_t)local;
     uint64_t localBufferSize;
-    FamLoc
+    Fam_Local_Buffer_Info localBuf = {
+        .start = 0,
+        .len = srcInterleaveSize, // Nothing should be larger than this
+        .desc = get_local_mr_desc(destRegionId, destOffset),
+    };
+    cout << "mr_desc " << localBuf.desc << endl ;
     // Copy data to consecutive blocks till the end of the byte that needs to be
     // copied is reached
     while (currentSrcOffset < srcCopyEnd) {
@@ -486,8 +491,9 @@ void Fam_Memory_Service_Direct::copy(
                 memcpy(local, srcLocalAddr, localBufferSize);
             } else {
                 // Issue an IO
+                localBuf.start = currentLocalPtr;
                 fi_context *ctx = fabric_read(
-                    srcKeys[0], (void *)currentLocalPtr, localBufferSize,
+                    srcKeys[0], &localBuf, localBufferSize,
                     (uint64_t)(srcBaseAddrList[0]) + currentSrcOffset,
                     (*fiAddr)[srcMemserverIds[0]], famCtx, true);
                 // store the fi_context pointer to ensure the completion latter.
@@ -536,9 +542,9 @@ void Fam_Memory_Service_Direct::copy(
                 memcpy((void *)currentLocalPtr, srcLocalAddr, chunkSize);
             } else {
                 // Issue an IO
+                localBuf.start = currentLocalPtr;
                 fi_context *ctx = fabric_read(
-                    srcKeys[currentSrcServerIndex], (void *)currentLocalPtr,
-                    chunkSize,
+                    srcKeys[currentSrcServerIndex], &localBuf, chunkSize,
                     (uint64_t)(srcBaseAddrList[currentSrcServerIndex]) +
                         currentSrcFamPtr + srcDisplacement,
                     (*fiAddr)[srcMemserverIds[currentSrcServerIndex]], famCtx,
@@ -578,9 +584,9 @@ void Fam_Memory_Service_Direct::copy(
                 memcpy((void *)currentLocalPtr, srcLocalAddr, chunkSize);
             } else {
                 // Issue an IO
+                localBuf.start = currentLocalPtr;
                 fi_context *ctx = fabric_read(
-                    srcKeys[currentSrcServerIndex], (void *)currentLocalPtr,
-                    chunkSize,
+                    srcKeys[currentSrcServerIndex], &localBuf, chunkSize,
                     (uint64_t)(srcBaseAddrList[currentSrcServerIndex]) +
                         currentSrcFamPtr,
                     (*fiAddr)[srcMemserverIds[currentSrcServerIndex]], famCtx,

@@ -545,7 +545,7 @@ void *process_queue(void *arg) {
                     msgPointer->dstDataGdesc.offset + msgPointer->offset);
                 try {
                     // Write data to client's memory
-                    fam_local_buffer_info localBuf {
+                    Fam_Local_Buffer_Info localBuf {
                         .start = (uintptr_t)localPointerD,
                         .len = msgPointer->size,
                         .desc = NULL,
@@ -652,7 +652,7 @@ void *process_queue(void *arg) {
                             ATOMIC_REGION_ID, offsetB);
                         // Read from Client's memory into buffer
                         try {
-                            fam_local_buffer_info localBuf {
+                            Fam_Local_Buffer_Info localBuf {
                                 .start = (uintptr_t)localPointerB,
                                 .len = msgPointer->size,
                                 .desc = NULL,
@@ -776,7 +776,7 @@ void *process_queue(void *arg) {
                         localPointerB = allocator->get_local_pointer(
                             ATOMIC_REGION_ID, offsetB);
                         try {
-                            fam_local_buffer_info localBuf {
+                            Fam_Local_Buffer_Info localBuf {
                                 .start = (uintptr_t)localPointerB,
                                 .len = bufferSize,
                                 .desc = NULL,
@@ -921,7 +921,7 @@ void *process_queue(void *arg) {
                         localPointerB = allocator->get_local_pointer(
                             ATOMIC_REGION_ID, offsetB);
                         try {
-                            fam_local_buffer_info localBuf {
+                            Fam_Local_Buffer_Info localBuf {
                                 .start = (uintptr_t)localPointerB,
                                 .len = bufferSize,
                                 .desc = NULL,
@@ -1034,7 +1034,7 @@ void *process_queue(void *arg) {
                 }
                 // Copy data to client's memory
                 try {
-                    fam_local_buffer_info localBuf {
+                    Fam_Local_Buffer_Info localBuf {
                         .start = (uintptr_t)bufferPtr,
                         .len = bufferSize,
                         .desc = NULL,
@@ -1087,7 +1087,7 @@ void *process_queue(void *arg) {
                 }
                 // Copy data back to client's memory
                 try {
-                    fam_local_buffer_info localBuf {
+                    Fam_Local_Buffer_Info localBuf {
                         .start = (uintptr_t)bufferPtr,
                         .len = bufferSize,
                         .desc = NULL,

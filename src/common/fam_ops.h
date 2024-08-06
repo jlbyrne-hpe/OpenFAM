@@ -118,7 +118,7 @@ class Fam_Ops {
      * @return - 0 for successful completion, 1 for unsuccessful, and a negative
      * number in case of exceptions
      */
-    virtual int get_blocking(fam_local_buffer_info *localBuf,
+    virtual int get_blocking(Fam_Local_Buffer_Info *localBuf,
                              Fam_Descriptor *descriptor,
                              uint64_t offset, uint64_t nbytes) = 0;
 
@@ -132,7 +132,7 @@ class Fam_Ops {
      * from where memory should be copied
      * @param nbytes - number of bytes to be copied from global to local memory
      */
-    virtual void get_nonblocking(fam_local_buffer_info *localBuf,
+    virtual void get_nonblocking(Fam_Local_Buffer_Info *localBuf,
                                  Fam_Descriptor *descriptor,
                                  uint64_t offset, uint64_t nbytes) = 0;
 
@@ -147,7 +147,7 @@ class Fam_Ops {
      * @return - 0 for successful completion, 1 for unsuccessful completion,
      * negative number in case of exceptions
      */
-    virtual int put_blocking(fam_local_buffer_info *localBuf, Fam_Descriptor *descriptor,
+    virtual int put_blocking(Fam_Local_Buffer_Info *localBuf, Fam_Descriptor *descriptor,
                              uint64_t offset, uint64_t nbytes) = 0;
 
     /**
@@ -160,7 +160,7 @@ class Fam_Ops {
      * to where data should be copied
      * @param nbytes - number of bytes to be copied from local to FAM
      */
-    virtual void put_nonblocking(fam_local_buffer_info *localBuf,
+    virtual void put_nonblocking(Fam_Local_Buffer_Info *localBuf,
                                  Fam_Descriptor *descriptor,
                                  uint64_t offset, uint64_t nbytes) = 0;
 
@@ -184,7 +184,7 @@ class Fam_Ops {
      * negative number in case of exception
      * @see #fam_scatter_strided
      */
-    virtual int gather_blocking(fam_local_buffer_info *localBuf,
+    virtual int gather_blocking(Fam_Local_Buffer_Info *localBuf,
                                 Fam_Descriptor *descriptor,
                                 uint64_t nElements, uint64_t firstElement,
                                 uint64_t stride, uint64_t elementSize) = 0;
@@ -205,7 +205,7 @@ class Fam_Ops {
      * negative number in case errors
      * @see #fam_scatter_indexed
      */
-    virtual int gather_blocking(fam_local_buffer_info *localBuf,
+    virtual int gather_blocking(Fam_Local_Buffer_Info *localBuf,
                                 Fam_Descriptor *descriptor,
                                 uint64_t nElements, uint64_t *elementIndex,
                                 uint64_t elementSize) = 0;
@@ -226,7 +226,7 @@ class Fam_Ops {
      * @param elementSize - size of the element in bytes
      * @see #fam_scatter_strided
      */
-    virtual void gather_nonblocking(fam_local_buffer_info *localBuf,
+    virtual void gather_nonblocking(Fam_Local_Buffer_Info *localBuf,
 				    Fam_Descriptor *descriptor,
                                     uint64_t nElements, uint64_t firstElement,
                                     uint64_t stride, uint64_t elementSize) = 0;
@@ -245,7 +245,7 @@ class Fam_Ops {
      * @param elementSize - size of each element in bytes
      * @see #fam_scatter_indexed
      */
-    virtual void gather_nonblocking(fam_local_buffer_info *localBuf,
+    virtual void gather_nonblocking(Fam_Local_Buffer_Info *localBuf,
                                     Fam_Descriptor *descriptor,
                                     uint64_t nElements, uint64_t *elementIndex,
                                     uint64_t elementSize) = 0;
@@ -267,7 +267,7 @@ class Fam_Ops {
      * negative number in case errors
      * @see #fam_gather_strided
      */
-    virtual int scatter_blocking(fam_local_buffer_info *localBuf,
+    virtual int scatter_blocking(Fam_Local_Buffer_Info *localBuf,
                                  Fam_Descriptor *descriptor,
                                  uint64_t nElements, uint64_t firstElement,
                                  uint64_t stride, uint64_t elementSize) = 0;
@@ -287,7 +287,7 @@ class Fam_Ops {
      * negative number in case errors
      * @see #fam_gather_indexed
      */
-    virtual int scatter_blocking(fam_local_buffer_info *localBuf,
+    virtual int scatter_blocking(Fam_Local_Buffer_Info *localBuf,
                                  Fam_Descriptor *descriptor,
                                  uint64_t nElements, uint64_t *elementIndex,
                                  uint64_t elementSize) = 0;
@@ -309,7 +309,7 @@ class Fam_Ops {
      * negative number in case errors
      * @see #fam_gather_strided
      */
-    virtual void scatter_nonblocking(fam_local_buffer_info *localBuf,
+    virtual void scatter_nonblocking(Fam_Local_Buffer_Info *localBuf,
                                      Fam_Descriptor *descriptor,
                                      uint64_t nElements, uint64_t firstElement,
                                      uint64_t stride, uint64_t elementSize) = 0;
@@ -329,7 +329,7 @@ class Fam_Ops {
      * negative number in case errors
      * @see #fam_gather_indexed
      */
-    virtual void scatter_nonblocking(fam_local_buffer_info *localBuf,
+    virtual void scatter_nonblocking(Fam_Local_Buffer_Info *localBuf,
 				     Fam_Descriptor *descriptor,
                                      uint64_t nElements, uint64_t *elementIndex,
                                      uint64_t elementSize) = 0;

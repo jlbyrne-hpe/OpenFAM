@@ -774,11 +774,13 @@ int fabric_completion_wait(Fam_Context *famCtx, fi_context *fiCtx, int ioType) {
  * @param famCtx - Pointer to Fam_Context
  * @return - {true(0), false(1), errNo(<0)}
  */
-int fabric_write(uint64_t key, fam_local_buffer_info *localBuf, size_t nbytes,
+int fabric_write(uint64_t key, Fam_Local_Buffer_Info *localBuf, size_t nbytes,
                  uint64_t offset, fi_addr_t fiAddr, Fam_Context *famCtx) {
 
+    /*
     cout << __func__ << "," << __LINE__ << ":" << fiAddr << " " << offset <<
         " " << key << " "  << nbytes << endl;
+    */
     struct iovec iov = {
         .iov_base = (void *)localBuf->start,
         .iov_len = nbytes,
@@ -844,12 +846,13 @@ int fabric_write(uint64_t key, fam_local_buffer_info *localBuf, size_t nbytes,
  * @param famCtx - Pointer to Fam_Context
  * @return - {true(0), false(1), errNo(<0)}
  */
-int fabric_read(uint64_t key, fam_local_buffer_info *localBuf, size_t nbytes,
+int fabric_read(uint64_t key, Fam_Local_Buffer_Info *localBuf, size_t nbytes,
 		uint64_t offset, fi_addr_t fiAddr, Fam_Context *famCtx) {
 
-
+    /*
     cout << __func__ << "," << __LINE__ << ":" << fiAddr << " " << offset <<
         " " << key << " "  << nbytes << endl;
+    */
     struct iovec iov = {
         .iov_base = (void *)localBuf->start,
         .iov_len = localBuf->len,
@@ -1065,12 +1068,14 @@ fabric_read(std::vector<std::pair<iovec, fi_rma_iov>> ioInfo, void *desc,
  */
 
 struct fi_context *
-fabric_write(uint64_t key, fam_local_buffer_info *localBuf,
+fabric_write(uint64_t key, Fam_Local_Buffer_Info *localBuf,
 	     size_t nbytes, uint64_t offset, fi_addr_t fiAddr,
 	     Fam_Context *famCtx, bool block) {
 
+    /*
     cout << __func__ << "," << __LINE__ << ":" << fiAddr << " " << offset <<
         " " << key << " "  << nbytes << endl;
+    */
     struct iovec iov = {
         .iov_base = (void *)localBuf->start,
         .iov_len = nbytes,
@@ -1147,12 +1152,14 @@ fabric_write(uint64_t key, fam_local_buffer_info *localBuf,
  * @return - pointer to fi_context which refers the IO operation
  */
 
-struct fi_context *fabric_read(uint64_t key, fam_local_buffer_info *localBuf,
+struct fi_context *fabric_read(uint64_t key, Fam_Local_Buffer_Info *localBuf,
                                size_t nbytes, uint64_t offset, fi_addr_t fiAddr,
                                Fam_Context *famCtx, bool block) {
 
+    /*
     cout << __func__ << "," << __LINE__ << ":" << fiAddr << " " << offset <<
         " " << key << " "  << nbytes << endl;
+    */
     struct iovec iov = {
         .iov_base = (void *)localBuf->start,
         .iov_len = nbytes,
@@ -1226,7 +1233,7 @@ struct fi_context *fabric_read(uint64_t key, fam_local_buffer_info *localBuf,
  *  @return - pointer to fi_context which refers the IO operation
  */
 struct fi_context *fabric_scatter_stride(uint64_t key,
-					 fam_local_buffer_info *localBuf,
+					 Fam_Local_Buffer_Info *localBuf,
                                          size_t nbytes, uint64_t first,
                                          uint64_t count, uint64_t stride,
                                          fi_addr_t fiAddr, Fam_Context *famCtx,
@@ -1273,7 +1280,7 @@ struct fi_context *fabric_scatter_stride(uint64_t key,
  */
 
 struct fi_context *fabric_gather_stride(uint64_t key,
-					fam_local_buffer_info *localBuf,
+					Fam_Local_Buffer_Info *localBuf,
                                         size_t nbytes, uint64_t first,
                                         uint64_t count, uint64_t stride,
                                         fi_addr_t fiAddr, Fam_Context *famCtx,
@@ -1317,7 +1324,7 @@ struct fi_context *fabric_gather_stride(uint64_t key,
  *  @return - pointer to fi_context which refers the IO operation
  */
 struct fi_context *fabric_scatter_index(uint64_t key,
-					fam_local_buffer_info *localBuf,
+					Fam_Local_Buffer_Info *localBuf,
                                         size_t nbytes, uint64_t *index,
                                         uint64_t count, fi_addr_t fiAddr,
                                         Fam_Context *famCtx, size_t iov_limit,
@@ -1360,7 +1367,7 @@ struct fi_context *fabric_scatter_index(uint64_t key,
  *  @return - pointer to fam_fi_context which refers the IO operation
  */
 struct fi_context *fabric_gather_index(uint64_t key,
-				       fam_local_buffer_info *localBuf,
+				       Fam_Local_Buffer_Info *localBuf,
                                        size_t nbytes, uint64_t *index,
                                        uint64_t count, fi_addr_t fiAddr,
                                        Fam_Context *famCtx, size_t iov_limit,

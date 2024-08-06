@@ -392,7 +392,7 @@ void Fam_Ops_Libfabric::finalize() {
     }
 }
 
-int Fam_Ops_Libfabric::put_blocking(fam_local_buffer_info *localBuf,
+int Fam_Ops_Libfabric::put_blocking(Fam_Local_Buffer_Info *localBuf,
                                     Fam_Descriptor *descriptor,
                                     uint64_t offset, uint64_t nbytes) {
     uint64_t *memServerIds = descriptor->get_memserver_ids();
@@ -540,7 +540,7 @@ int Fam_Ops_Libfabric::put_blocking(fam_local_buffer_info *localBuf,
     return ret;
 }
 
-int Fam_Ops_Libfabric::get_blocking(fam_local_buffer_info *localBuf,
+int Fam_Ops_Libfabric::get_blocking(Fam_Local_Buffer_Info *localBuf,
                                     Fam_Descriptor *descriptor,
                                     uint64_t offset, uint64_t nbytes) {
     uint64_t *memServerIds = descriptor->get_memserver_ids();
@@ -688,7 +688,7 @@ int Fam_Ops_Libfabric::get_blocking(fam_local_buffer_info *localBuf,
     return ret;
 }
 
-int Fam_Ops_Libfabric::scatter_blocking(fam_local_buffer_info *localBuf,
+int Fam_Ops_Libfabric::scatter_blocking(Fam_Local_Buffer_Info *localBuf,
                                         Fam_Descriptor *descriptor,
                                         uint64_t nElements,
                                         uint64_t firstElement, uint64_t stride,
@@ -835,7 +835,7 @@ int Fam_Ops_Libfabric::scatter_blocking(fam_local_buffer_info *localBuf,
     return ret;
 }
 
-int Fam_Ops_Libfabric::gather_blocking(fam_local_buffer_info *localBuf,
+int Fam_Ops_Libfabric::gather_blocking(Fam_Local_Buffer_Info *localBuf,
                                        Fam_Descriptor *descriptor,
                                        uint64_t nElements,
                                        uint64_t firstElement, uint64_t stride,
@@ -983,7 +983,7 @@ int Fam_Ops_Libfabric::gather_blocking(fam_local_buffer_info *localBuf,
     return ret;
 }
 
-int Fam_Ops_Libfabric::scatter_blocking(fam_local_buffer_info *localBuf,
+int Fam_Ops_Libfabric::scatter_blocking(Fam_Local_Buffer_Info *localBuf,
                                         Fam_Descriptor *descriptor,
                                         uint64_t nElements,
                                         uint64_t *elementIndex,
@@ -1131,7 +1131,7 @@ int Fam_Ops_Libfabric::scatter_blocking(fam_local_buffer_info *localBuf,
     return ret;
 }
 
-int Fam_Ops_Libfabric::gather_blocking(fam_local_buffer_info *localBuf,
+int Fam_Ops_Libfabric::gather_blocking(Fam_Local_Buffer_Info *localBuf,
                                        Fam_Descriptor *descriptor,
                                        uint64_t nElements,
                                        uint64_t *elementIndex,
@@ -1279,7 +1279,7 @@ int Fam_Ops_Libfabric::gather_blocking(fam_local_buffer_info *localBuf,
     return ret;
 }
 
-void Fam_Ops_Libfabric::put_nonblocking(fam_local_buffer_info *localBuf,
+void Fam_Ops_Libfabric::put_nonblocking(Fam_Local_Buffer_Info *localBuf,
                                         Fam_Descriptor *descriptor,
                                         uint64_t offset, uint64_t nbytes) {
     uint64_t *memServerIds = descriptor->get_memserver_ids();
@@ -1388,7 +1388,7 @@ void Fam_Ops_Libfabric::put_nonblocking(fam_local_buffer_info *localBuf,
     return;
 }
 
-void Fam_Ops_Libfabric::get_nonblocking(fam_local_buffer_info *localBuf,
+void Fam_Ops_Libfabric::get_nonblocking(Fam_Local_Buffer_Info *localBuf,
                                         Fam_Descriptor *descriptor,
                                         uint64_t offset, uint64_t nbytes) {
     uint64_t *memServerIds = descriptor->get_memserver_ids();
@@ -1499,7 +1499,7 @@ void Fam_Ops_Libfabric::get_nonblocking(fam_local_buffer_info *localBuf,
 }
 
 void Fam_Ops_Libfabric::scatter_nonblocking(
-    fam_local_buffer_info *localBuf, Fam_Descriptor *descriptor,
+    Fam_Local_Buffer_Info *localBuf, Fam_Descriptor *descriptor,
     uint64_t nElements, uint64_t firstElement, uint64_t stride,
     uint64_t elementSize) {
     uint64_t *memServerIds = descriptor->get_memserver_ids();
@@ -1607,7 +1607,7 @@ void Fam_Ops_Libfabric::scatter_nonblocking(
 }
 
 void Fam_Ops_Libfabric::gather_nonblocking(
-    fam_local_buffer_info *localBuf, Fam_Descriptor *descriptor,
+    Fam_Local_Buffer_Info *localBuf, Fam_Descriptor *descriptor,
     uint64_t nElements, uint64_t firstElement, uint64_t stride,
     uint64_t elementSize) {
     uint64_t *memServerIds = descriptor->get_memserver_ids();
@@ -1713,7 +1713,7 @@ void Fam_Ops_Libfabric::gather_nonblocking(
     return;
 }
 
-void Fam_Ops_Libfabric::scatter_nonblocking(fam_local_buffer_info *localBuf,
+void Fam_Ops_Libfabric::scatter_nonblocking(Fam_Local_Buffer_Info *localBuf,
                                             Fam_Descriptor *descriptor,
                                             uint64_t nElements,
                                             uint64_t *elementIndex,
@@ -1821,7 +1821,7 @@ void Fam_Ops_Libfabric::scatter_nonblocking(fam_local_buffer_info *localBuf,
     return;
 }
 
-void Fam_Ops_Libfabric::gather_nonblocking(fam_local_buffer_info *localBuf,
+void Fam_Ops_Libfabric::gather_nonblocking(Fam_Local_Buffer_Info *localBuf,
                                            Fam_Descriptor *descriptor,
                                            uint64_t nElements,
                                            uint64_t *elementIndex,

@@ -437,7 +437,7 @@ inline string protocol_map(string provider) {
     return protocol;
 }
 
-struct fam_local_buffer_info {
+struct Fam_Local_Buffer_Info {
     uintptr_t start;
     size_t len;
     void *desc;

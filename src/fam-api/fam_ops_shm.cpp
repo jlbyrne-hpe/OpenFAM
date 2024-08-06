@@ -122,7 +122,7 @@ Fam_Context *Fam_Ops_SHM::get_context(Fam_Descriptor *descriptor) {
     }
 }
 
-int Fam_Ops_SHM::put_blocking(fam_local_buffer_info *localBuf,
+int Fam_Ops_SHM::put_blocking(Fam_Local_Buffer_Info *localBuf,
 			      Fam_Descriptor *descriptor,
                               uint64_t offset, uint64_t nbytes) {
     void *local = (void *)localBuf->start;
@@ -156,7 +156,7 @@ int Fam_Ops_SHM::put_blocking(fam_local_buffer_info *localBuf,
     return FAM_SUCCESS;
 }
 
-int Fam_Ops_SHM::get_blocking(fam_local_buffer_info *localBuf,
+int Fam_Ops_SHM::get_blocking(Fam_Local_Buffer_Info *localBuf,
 			      Fam_Descriptor *descriptor,
                               uint64_t offset, uint64_t nbytes) {
     void *local = (void *)localBuf->start;
@@ -190,7 +190,7 @@ int Fam_Ops_SHM::get_blocking(fam_local_buffer_info *localBuf,
     return FAM_SUCCESS;
 }
 
-int Fam_Ops_SHM::gather_blocking(fam_local_buffer_info *localBuf,
+int Fam_Ops_SHM::gather_blocking(Fam_Local_Buffer_Info *localBuf,
                                  Fam_Descriptor *descriptor,
                                  uint64_t nElements, uint64_t firstElement,
                                  uint64_t stride, uint64_t elementSize) {
@@ -234,7 +234,7 @@ int Fam_Ops_SHM::gather_blocking(fam_local_buffer_info *localBuf,
     return FAM_SUCCESS;
 }
 
-int Fam_Ops_SHM::gather_blocking(fam_local_buffer_info *localBuf,
+int Fam_Ops_SHM::gather_blocking(Fam_Local_Buffer_Info *localBuf,
                                  Fam_Descriptor *descriptor,
                                  uint64_t nElements, uint64_t *elementIndex,
                                  uint64_t elementSize) {
@@ -281,7 +281,7 @@ int Fam_Ops_SHM::gather_blocking(fam_local_buffer_info *localBuf,
     return FAM_SUCCESS;
 }
 
-int Fam_Ops_SHM::scatter_blocking(fam_local_buffer_info *localBuf,
+int Fam_Ops_SHM::scatter_blocking(Fam_Local_Buffer_Info *localBuf,
                                   Fam_Descriptor *descriptor,
                                   uint64_t nElements, uint64_t firstElement,
                                   uint64_t stride, uint64_t elementSize) {
@@ -325,7 +325,7 @@ int Fam_Ops_SHM::scatter_blocking(fam_local_buffer_info *localBuf,
     return FAM_SUCCESS;
 }
 
-int Fam_Ops_SHM::scatter_blocking(fam_local_buffer_info *localBuf,
+int Fam_Ops_SHM::scatter_blocking(Fam_Local_Buffer_Info *localBuf,
                                   Fam_Descriptor *descriptor,
                                   uint64_t nElements, uint64_t *elementIndex,
                                   uint64_t elementSize) {
@@ -372,7 +372,7 @@ int Fam_Ops_SHM::scatter_blocking(fam_local_buffer_info *localBuf,
     return FAM_SUCCESS;
 }
 
-void Fam_Ops_SHM::put_nonblocking(fam_local_buffer_info *localBuf,
+void Fam_Ops_SHM::put_nonblocking(Fam_Local_Buffer_Info *localBuf,
                                   Fam_Descriptor *descriptor,
                                   uint64_t offset, uint64_t nbytes) {
     void *local = (void *)localBuf->start;
@@ -398,7 +398,7 @@ void Fam_Ops_SHM::put_nonblocking(fam_local_buffer_info *localBuf,
     return;
 }
 
-void Fam_Ops_SHM::get_nonblocking(fam_local_buffer_info *localBuf,
+void Fam_Ops_SHM::get_nonblocking(Fam_Local_Buffer_Info *localBuf,
                                   Fam_Descriptor *descriptor,
                                   uint64_t offset, uint64_t nbytes) {
     void *local = (void *)localBuf->start;
@@ -425,7 +425,7 @@ void Fam_Ops_SHM::get_nonblocking(fam_local_buffer_info *localBuf,
     return;
 }
 
-void Fam_Ops_SHM::gather_nonblocking(fam_local_buffer_info *localBuf,
+void Fam_Ops_SHM::gather_nonblocking(Fam_Local_Buffer_Info *localBuf,
                                      Fam_Descriptor *descriptor,
                                      uint64_t nElements, uint64_t firstElement,
                                      uint64_t stride, uint64_t elementSize) {
@@ -462,7 +462,7 @@ void Fam_Ops_SHM::gather_nonblocking(fam_local_buffer_info *localBuf,
     return;
 }
 
-void Fam_Ops_SHM::gather_nonblocking(fam_local_buffer_info *localBuf,
+void Fam_Ops_SHM::gather_nonblocking(Fam_Local_Buffer_Info *localBuf,
                                      Fam_Descriptor *descriptor,
                                      uint64_t nElements, uint64_t *elementIndex,
                                      uint64_t elementSize) {
@@ -498,7 +498,7 @@ void Fam_Ops_SHM::gather_nonblocking(fam_local_buffer_info *localBuf,
     return;
 }
 
-void Fam_Ops_SHM::scatter_nonblocking(fam_local_buffer_info *localBuf,
+void Fam_Ops_SHM::scatter_nonblocking(Fam_Local_Buffer_Info *localBuf,
                                       Fam_Descriptor *descriptor,
                                       uint64_t nElements, uint64_t firstElement,
                                       uint64_t stride, uint64_t elementSize) {
@@ -534,7 +534,7 @@ void Fam_Ops_SHM::scatter_nonblocking(fam_local_buffer_info *localBuf,
 
     return;
 }
-void Fam_Ops_SHM::scatter_nonblocking(fam_local_buffer_info *localBuf,
+void Fam_Ops_SHM::scatter_nonblocking(Fam_Local_Buffer_Info *localBuf,
                                       Fam_Descriptor *descriptor,
                                       uint64_t nElements,
                                       uint64_t *elementIndex,
