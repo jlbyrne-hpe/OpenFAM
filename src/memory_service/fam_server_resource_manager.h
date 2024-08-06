@@ -93,6 +93,8 @@ class Fam_Server_Resource_Manager {
                              Fam_Server_Resource *famResource);
     void unregister_memory(uint64_t regionId, uint64_t registrationId,
                            Fam_Server_Resource *famResource);
+    void *get_local_mr_desc(uint64_t regionId, uint64_t registrationId,
+                            Fam_Server_Resource *famResource);
     void register_region_memory(uint64_t regionId, bool accessType,
                                 Fam_Server_Resource *famResource = NULL);
     void unregister_region_memory(Fam_Server_Resource *famResource);

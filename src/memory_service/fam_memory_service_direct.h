@@ -190,6 +190,8 @@ class Fam_Memory_Service_Direct : public Fam_Memory_Service {
                            const char *provider, const char *if_device);
     void fabric_finalize();
     void progress_thread();
+
+    void *get_local_mr_desc(uint64_t regionId, uint64_t offset);
 };
 
 } // namespace openfam

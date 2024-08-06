@@ -646,6 +646,27 @@ void Fam_Server_Resource_Manager::unregister_memory(
     pthread_rwlock_unlock(&famResource->famRegionLock);
 }
 
+void *Fam_Server_Resource_Manager::get_local_mr_desc(
+    uint64_t regionId, uint64_t registrationId,
+    Fam_Server_Resource *famResource) {
+
+    void *desc = nullptr;
+    uint64_t rwKey = generate_access_key(regionId, registrationId, 1);
+
+    pthread_rwlock_rdlock(&famResource->famRegionLock);
+
+    auto rwMr = famResource->famRegistrationTable->find(rwKey);
+    if (rwMr != famResource->famRegistrationTable->end()) {
+        Fam_Memory_Registration *famRegistration = rwMr->second;
+        if (strncmp(famOps->get_provider(), "cxi", 3) == 0)
+            desc = fi_mr_desc(famRegistration->mr);
+    }
+
+    pthread_rwlock_unlock(&famResource->famRegionLock);
+
+    return desc;
+}
+
 void Fam_Server_Resource_Manager::unregister_region_memory(
     Fam_Server_Resource *famResource) {
     int ret = 0;
