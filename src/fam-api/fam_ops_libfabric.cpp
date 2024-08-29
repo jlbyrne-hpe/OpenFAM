@@ -324,7 +324,9 @@ void Fam_Ops_Libfabric::populate_address_vector(void *memServerInfoBuffer,
         }
         fiAddrs->at(nodeId) = tmpAddrV[0];
     }
-    // Initialize defaultCtx
+    auto obj = defContexts->find(FAM_DEFAULT_CTX_ID);
+    if (obj != defContexts->end())
+        return;
     if (famContextModel == FAM_CONTEXT_DEFAULT) {
         Fam_Context *defaultCtx = new Fam_Context(fi, domain, famThreadModel);
         defContexts->insert({FAM_DEFAULT_CTX_ID, defaultCtx});

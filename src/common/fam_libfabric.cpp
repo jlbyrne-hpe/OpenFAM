@@ -262,6 +262,30 @@ void libfabric_dump_profile_summary(void) {
         LIBFABRIC_PROFILE_END_OPS(funcname)                                    \
     }
 
+template <typename T>
+static void allocate_struct_ptr(T *&ptr) {
+    if (!ptr) {
+        ptr = (T *)calloc(1, sizeof(T));
+    }
+}
+
+static void set_device_name(struct fi_info *hints, const char *provider,
+			    const char *if_device) {
+    // Preserve existing acceptance of IP devices for verbs by checking
+    // if the device name is in /sys/class/net
+    if ((strncmp(provider, "verbs", 5) == 0)) {
+        struct stat my_stat;
+        string sys_net_path = "/sys/class/net/";
+        sys_net_path += if_device;
+        if (stat(sys_net_path.c_str(), &my_stat) == 0) {
+            setenv("FI_VERBS_IFACE", if_device, 0);
+            return;
+        }
+    }
+    allocate_struct_ptr(hints->domain_attr);
+    hints->domain_attr->name = strdup(if_device);
+}
+
 /**
  * Initialize the libfabric library. This method is required to be the first
  * method called when a process uses the OpenFAM library.
@@ -284,16 +308,6 @@ int fabric_initialize(const char *name, const char *service, bool source,
     LIBFABRIC_PROFILE_INIT();
     LIBFABRIC_PROFILE_START_TIME();
 
-    if (if_device != NULL && (strcmp(if_device, "") != 0)) {
-        if ((strncmp(provider, "verbs", 5) == 0)) {
-            setenv("FI_VERBS_IFACE", if_device, 0);
-        }
-	else if((strncmp(provider, "cxi", 3) == 0)) {
-            setenv("FI_CXI_DEVICE_NAME", if_device, 0);
-        }
-
-    }
-
     // Get the hints and initialize configuration
     FI_CALL(hints, fi_allocinfo);
 
@@ -301,14 +315,14 @@ int fabric_initialize(const char *name, const char *service, bool source,
         return -1;
     }
 
-    if (!hints->ep_attr)
-        hints->ep_attr =
-            (struct fi_ep_attr *)calloc(1, sizeof(struct fi_ep_attr));
+    if (if_device != NULL && (strcmp(if_device, "") != 0)) {
+        set_device_name(hints, provider, if_device);
+    }
+
+    allocate_struct_ptr(hints->ep_attr);
     hints->ep_attr->type = FI_EP_RDM;
 
-    if (!hints->tx_attr)
-        hints->tx_attr =
-            (struct fi_tx_attr *)calloc(1, sizeof(struct fi_tx_attr));
+    allocate_struct_ptr(hints->tx_attr);
     hints->tx_attr->op_flags = FI_DELIVERY_COMPLETE;
 
     hints->caps = FI_MSG | FI_RMA | FI_ATOMICS;
@@ -317,9 +331,7 @@ int fabric_initialize(const char *name, const char *service, bool source,
     if ((strncmp(provider, "cxi", 3) != 0))
     	hints->mode = FI_CONTEXT;
 
-    if (!hints->domain_attr)
-        hints->domain_attr =
-            (struct fi_domain_attr *)calloc(1, sizeof(struct fi_domain_attr));
+    allocate_struct_ptr(hints->domain_attr);
     if ((strncmp(provider, "cxi", 3) != 0))
     	hints->domain_attr->av_type = FI_AV_MAP;
 

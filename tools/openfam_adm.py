@@ -739,31 +739,37 @@ if args.start_service:
             memory_server_id = server.split(":")[0]
             memory_server_addr = server.split(":")[1]
             key_string="openfam:mem:"+server
+            command_options = openfam_admin_tool_config_doc["launcher_options"]["common"]
+            if len(openfam_admin_tool_config_doc["launcher_options"]["memserver"]):
+                command_options = command_options + " " + \
+                    openfam_admin_tool_config_doc["launcher_options"]["memserver"][int(memory_server_id)]
             if openfam_admin_tool_config_doc["launcher"] == "ssh":
-                cmd = (
-                    ssh_cmd
+                cmd = (ssh_cmd
                     + memory_server_addr
                     + " \"sh -c '"
                     + "nohup "
+                    + command_options + " "
+#                    + "~/tools/debug_wrapper "
+#                    + "strace -f -s 1500 "
                     + openfam_install_path
                     + "/bin/memory_server -m "
                     + memory_server_id
-                    + "> /dev/null 2>&1 &'\""
+                    + " &> ~/memory_server.out." + memory_server_id
+#                    + " > /dev/null 2>&1"
+                    + " &'\""
                 )
             elif openfam_admin_tool_config_doc["launcher"] == "slurm":
-                command_options = openfam_admin_tool_config_doc["launcher_options"]["common"]
-                if len(openfam_admin_tool_config_doc["launcher_options"]["memserver"]):
-                    command_options = command_options + " " + \
-                        openfam_admin_tool_config_doc["launcher_options"]["memserver"][int(
-                            memory_server_id)]
                 cmd = (
                     "srun "
                     + "--nodelist=" + memory_server_addr + " "
                     + "--comment=" + key_string + " "
                     + command_options + " "
+#                    + "~/tools/debug_wrapper "
+#                    + "strace -f -s 1500 "
                     + openfam_install_path
                     + "/bin/memory_server -m "
                     + memory_server_id
+                    + " &> ~/memory_server.out." + memory_server_id
                     + " &"
                 )
             else:
@@ -790,12 +796,17 @@ if args.start_service:
             metadata_server_addr = server.split(":")[1]
             metadata_server_rpc_port = server.split(":")[2]
             key_string="openfam:meta:"+server
+            command_options = openfam_admin_tool_config_doc["launcher_options"]["common"]
+            if len(openfam_admin_tool_config_doc["launcher_options"]["metaserver"]):
+                command_options = command_options + " " + \
+                    openfam_admin_tool_config_doc["launcher_options"]["metaserver"][int(metadata_server_id)]
             if openfam_admin_tool_config_doc["launcher"] == "ssh":
                 cmd = (
                     ssh_cmd
                     + metadata_server_addr
                     + " \"sh -c '"
                     + "nohup "
+                    + command_options + " "
                     + openfam_install_path
                     + "/bin/metadata_server -a "
                     + metadata_server_addr
@@ -804,11 +815,6 @@ if args.start_service:
                     + "> /dev/null 2>&1 &'\""
                 )
             elif openfam_admin_tool_config_doc["launcher"] == "slurm":
-                command_options = openfam_admin_tool_config_doc["launcher_options"]["common"]
-                if len(openfam_admin_tool_config_doc["launcher_options"]["metaserver"]):
-                    command_options = command_options + " " + \
-                        openfam_admin_tool_config_doc["launcher_options"]["metaserver"][int(
-                            metadata_server_id)]
                 cmd = (
                     "srun "
                     + "--nodelist=" + metadata_server_addr + " "
@@ -819,6 +825,7 @@ if args.start_service:
                     + metadata_server_addr
                     + " -r "
                     + str(metadata_server_rpc_port)
+                    + " &> ~/metadata_server.out"
                     + " &"
                 )
             else:
@@ -844,31 +851,38 @@ if args.start_service:
         cis_addr = cis_config_doc["rpc_interface"].split(":")[0]
         cis_rpc_port = cis_config_doc["rpc_interface"].split(":")[1]
         key_string="openfam:cis:"+cis_config_doc["rpc_interface"]
+        command_options = openfam_admin_tool_config_doc["launcher_options"]["common"]
+        if len(openfam_admin_tool_config_doc["launcher_options"]["cis"]):
+                command_options = command_options + " " + \
+                    openfam_admin_tool_config_doc["launcher_options"]["cis"]
         if openfam_admin_tool_config_doc["launcher"] == "ssh":
             cmd = (
                 ssh_cmd
                 + cis_addr
                 + " \"sh -c '"
                 + "nohup "
+                + command_options + " "
                 + openfam_install_path
                 + "/bin/cis_server -a "
                 + cis_addr
                 + " -r "
                 + str(cis_rpc_port)
-                + "> /dev/null 2>&1 &'\""
+                + " > ~/cis_server.out"
+#                + " > /dev/null"
+                + " 2>&1 &'\""
             )
         elif openfam_admin_tool_config_doc["launcher"] == "slurm":
             cmd = (
                 "srun "
                 + "--nodelist=" + cis_addr + " "
                 + "--comment=" + key_string + " "
-                + openfam_admin_tool_config_doc["launcher_options"]["common"] + " "
-                + openfam_admin_tool_config_doc["launcher_options"]["cis"] + " "
+                + command_options + " "
                 + openfam_install_path
                 + "/bin/cis_server -a "
                 + cis_addr
                 + " -r "
                 + str(cis_rpc_port)
+                + " &> ~/cis_server.out"
                 + " &"
             )
         else:
