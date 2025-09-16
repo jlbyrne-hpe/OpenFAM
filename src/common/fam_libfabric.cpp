@@ -331,6 +331,8 @@ int fabric_initialize(const char *name, const char *service, bool source,
     } else if((strncmp(provider, "cxi", 3) == 0)) {
     	hints->domain_attr->mr_mode = FI_MR_ENDPOINT;
     	hints->tx_attr->size = 16384;
+	hints->caps |= FI_FENCE;
+	//hints->tx_attr->caps |= FI_FENCE;
     } else
         hints->domain_attr->mr_mode = FI_MR_SCALABLE;
 
@@ -613,6 +615,12 @@ int fabric_deregister_mr(fid_mr *&mr) {
     return 0;
 }
 
+volatile int jlb_debug;
+
+int jlb_debug_hook(void) {
+    return jlb_debug;
+}
+
 int fabric_retry(Fam_Context *famCtx, ssize_t ret, uint32_t *retry_cnt) {
 
     if (ret) {
@@ -637,6 +645,9 @@ int fabric_retry(Fam_Context *famCtx, ssize_t ret, uint32_t *retry_cnt) {
                               "Fabric max retry count exceeded");
             }
         } else {
+            if (jlb_debug_hook())
+                return 1;
+
             THROW_ERR_MSG(Fam_Datapath_Exception, fabric_strerror((int)ret));
         }
     }
