@@ -151,11 +151,11 @@ Fam_Context::Fam_Context(struct fi_info *fi, struct fid_domain *domain,
 
 Fam_Context::~Fam_Context() {
     if (!isNVMM) {
-        fi_close(&ep->fid);
-        fi_close(&txcq->fid);
-        fi_close(&rxcq->fid);
-        fi_close(&txCntr->fid);
-        fi_close(&rxCntr->fid);
+        FI_CLOSE(ep);
+        FI_CLOSE(txcq);
+        FI_CLOSE(rxcq);
+        FI_CLOSE(txCntr);
+        FI_CLOSE(rxCntr);
     }
     pthread_rwlock_destroy(&ctxRWLock);
 }

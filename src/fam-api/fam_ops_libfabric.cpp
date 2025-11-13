@@ -403,25 +403,10 @@ void Fam_Ops_Libfabric::finalize() {
         fi = NULL;
     }
 
-    if (fabric) {
-        fi_close(&fabric->fid);
-        fabric = NULL;
-    }
-
-    if (eq) {
-        fi_close(&eq->fid);
-        eq = NULL;
-    }
-
-    if (domain) {
-        fi_close(&domain->fid);
-        domain = NULL;
-    }
-
-    if (av) {
-        fi_close(&av->fid);
-        av = NULL;
-    }
+    FI_CLOSE(av);
+    FI_CLOSE(eq);
+    FI_CLOSE(domain);
+    FI_CLOSE(fabric);
 }
 
 int Fam_Ops_Libfabric::put_blocking(void *local, Fam_Descriptor *descriptor,

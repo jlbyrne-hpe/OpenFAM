@@ -60,6 +60,19 @@
 
 namespace openfam {
 
+#define FI_CLOSE(field_)                                                \
+do {                                                                    \
+    if (field_) {                                                       \
+        int rc_ = fi_close(&(field_)->fid);                             \
+        field_ = NULL;                                                  \
+	if (rc_ < 0) {                                                  \
+            /* Used in destructors, so this is the best we can do. */   \
+            std::cerr << "fi_close("  << #field_ << ") returned " <<    \
+                rc_ << ":" << fi_strerror(-rc_);                        \
+        }                                                               \
+    }                                                                   \
+} while (0)
+
 struct fam_fi_context {
     struct fi_context2;
     void *fam_internal[8];

@@ -262,6 +262,12 @@ void libfabric_dump_profile_summary(void) {
         LIBFABRIC_PROFILE_END_OPS(funcname)                                    \
     }
 
+#define FI_CLOSE_NO_RETURN(field_)					       \
+    {                                                                          \
+        LIBFABRIC_PROFILE_START_OPS()                                          \
+        FI_CLOSE(field_);                                                      \
+        LIBFABRIC_PROFILE_END_OPS(fi_close)                                    \
+    }
 /**
  * Initialize the libfabric library. This method is required to be the first
  * method called when a process uses the OpenFAM library.
@@ -394,8 +400,7 @@ int fabric_initialize(const char *name, const char *service, bool source,
         FI_CALL_NO_RETURN(fi_freeinfo, hints);
         FI_CALL_NO_RETURN(fi_freeinfo, *fi);
         *fi = NULL;
-        FI_CALL_NO_RETURN(fi_close, &(*fabric)->fid);
-        *fabric = NULL;
+        FI_CLOSE_NO_RETURN((*fabric));
         return ret;
     }
 
@@ -406,10 +411,8 @@ int fabric_initialize(const char *name, const char *service, bool source,
         FI_CALL_NO_RETURN(fi_freeinfo, hints);
         FI_CALL_NO_RETURN(fi_freeinfo, *fi);
         *fi = NULL;
-        FI_CALL_NO_RETURN(fi_close, &(*fabric)->fid);
-        *fabric = NULL;
-        FI_CALL_NO_RETURN(fi_close, &(*eq)->fid);
-        *eq = NULL;
+        FI_CLOSE_NO_RETURN((*fabric));
+        FI_CLOSE_NO_RETURN((*eq));
         return ret;
     }
 #ifdef __has_include
@@ -459,7 +462,7 @@ int fabric_initialize_av(struct fi_info *fi, struct fid_domain *domain,
             FI_CALL(ret, fi_av_bind, *av, &eq->fid, 0);
             if (ret < 0) {
                 // print_fierr("fi_av_bind", ret);
-                FI_CALL_NO_RETURN(fi_close, &(*av)->fid);
+                FI_CLOSE_NO_RETURN((*av));
                 *av = NULL;
                 return -1;
             }
@@ -589,12 +592,12 @@ int fabric_register_mr(void *addr, size_t size, uint64_t *key,
     if (strncmp(provider, "cxi", 3) == 0) {
         FI_CALL(ret, fi_mr_bind, mr, &ep->fid, 0);
         if (ret < 0) {
-            FI_CALL_NO_RETURN(fi_close, &(mr->fid));
+            FI_CLOSE_NO_RETURN(mr);
             return ret;
         }
         FI_CALL(ret, fi_mr_enable, mr);
         if (ret < 0) {
-            FI_CALL_NO_RETURN(fi_close, &(mr->fid));
+            FI_CLOSE_NO_RETURN(mr);
             return ret;
         }
     }
@@ -609,7 +612,7 @@ int fabric_register_mr(void *addr, size_t size, uint64_t *key,
  * @return - {true(0), false(1), errNo(<0)}
  */
 int fabric_deregister_mr(fid_mr *&mr) {
-    FI_CALL_NO_RETURN(fi_close, &(mr->fid));
+    FI_CLOSE_NO_RETURN(mr);
     return 0;
 }
 
