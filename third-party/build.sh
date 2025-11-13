@@ -196,7 +196,7 @@ case $OS in
 			;;
 	"opensuse-leap" | "sles")
 		case $(get_os_release_version) in
-                     *15*SP3* | *15*SP4*)
+                     *15*SP[345]*)
 		         if [ "$no_package_install" != "true" ]
 		         then
                             sudo zypper --non-interactive install ${sles15_sp3_package_list}
